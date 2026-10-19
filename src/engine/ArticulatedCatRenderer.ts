@@ -19,7 +19,7 @@
  * AI keep working on the same geometry.
  */
 import { hexToRgb, mixHex, rgba, shadeHex } from '../shared/color';
-import { catmullRom, clamp, clamp01, convexHull, lerp, matApply, matIdentity, matRotate, matScale, matTranslate, smoothstep, type Mat2D, type Vec2 } from '../shared/math';
+import { catmullRom, clamp, clamp01, convexHull, lerp, matApply, matIdentity, matRotate, matScale, matTranslate, smoothstep, wrapAngle, type Mat2D, type Vec2 } from '../shared/math';
 import type { CatProfile } from '../shared/types';
 import { dataUrlToBitmap } from '../shared/zip';
 import { createCanvas, ctx2d, type AnyCanvas, type AnyCtx } from './canvas';
@@ -106,6 +106,44 @@ const T_END = 1.16;
 const HEAD_R = 11.6;
 /** Pulls the head toward the shoulders so the smaller skull keeps a short, thick neck. */
 const HEAD_PULL = 0.86;
+/**
+ * Neck bone limits (local units): the skull centre never sits further than this
+ * from the shoulders, and the head–torso joint bends only within this range
+ * relative to the spine (−: chin up / forward, +: turned back toward the flank).
+ * Poses that ask for more (a chin draped far over a partner) are clamped.
+ */
+export const NECK_MAX = 22.5;
+export const NECK_ANGLE_MIN = -1.55;
+export const NECK_ANGLE_MAX = 2.35;
+/** Fastest the tail's base direction may swing (rad/s) — keeps state changes from flicking the tail. */
+export const TAIL_BASE_MAX_RATE = 5;
+
+/**
+ * Head–torso joint constraint: returns the head centre with the shoulder→head
+ * vector clamped to NECK_MAX and its angle to the spine direction `d` clamped to
+ * [NECK_ANGLE_MIN, NECK_ANGLE_MAX] (short necks — the head tucked into the chest —
+ * are left alone).
+ */
+export function clampNeck(shoulder: Vec2, head: Vec2, d: Vec2, maxLen = NECK_MAX): Vec2 {
+  let vx = head.x - shoulder.x;
+  let vy = head.y - shoulder.y;
+  let len = Math.hypot(vx, vy);
+  if (len > maxLen) {
+    vx *= maxLen / len;
+    vy *= maxLen / len;
+    len = maxLen;
+  }
+  if (len > 8) {
+    const spine = Math.atan2(d.y, d.x);
+    const rel = wrapAngle(Math.atan2(vy, vx) - spine);
+    const cl = clamp(rel, NECK_ANGLE_MIN, NECK_ANGLE_MAX);
+    if (cl !== rel) {
+      vx = Math.cos(spine + cl) * len;
+      vy = Math.sin(spine + cl) * len;
+    }
+  }
+  return { x: shoulder.x + vx, y: shoulder.y + vy };
+}
 /**
  * Global render quality, lowered automatically by the page loop when frames run
  * long (many cats on a slow machine): 1 = full, 0 = lighter lighting and fur.
@@ -492,7 +530,8 @@ export class ArticulatedCatRenderer {
 
     // Head & neck — realistic skull on a short, thick neck.
     const r = HEAD_R * (0.94 + 0.08 * chonk);
-    const head = { x: S.x + (pose.headX - S.x) * HEAD_PULL, y: S.y + (pose.headY - S.y) * HEAD_PULL, r, rot: pose.headRot };
+    const hc = clampNeck(S, { x: S.x + (pose.headX - S.x) * HEAD_PULL, y: S.y + (pose.headY - S.y) * HEAD_PULL }, d);
+    const head = { x: hc.x, y: hc.y, r, rot: pose.headRot };
     const neckBase = torso[Math.round(TORSO_SAMPLES * 0.75)];
     const ndx = head.x - neckBase.x;
     const ndy = head.y + r * 0.3 - neckBase.y;
@@ -577,10 +616,20 @@ export class ArticulatedCatRenderer {
     return { scruff, com: { x: (hip.x * 2 + mid.x) / 3, y: (hip.y * 2 + mid.y) / 3 } };
   }
 
-  /** World-space anchor + base angle for the Verlet tail. */
-  tailAnchorWorld(skel: Skeleton, pose: Pose): { x: number; y: number; angle: number } {
+  /** Last (rate-limited) local tail base angle, for TAIL_BASE_MAX_RATE. */
+  private tailBase = NaN;
+
+  /**
+   * World-space anchor + base angle for the Verlet tail. With `dt` > 0 the base
+   * direction is rate-limited (TAIL_BASE_MAX_RATE) so a state change can't flick it.
+   */
+  tailAnchorWorld(skel: Skeleton, pose: Pose, dt = 0): { x: number; y: number; angle: number } {
     const p = matApply(skel.M, skel.tailAnchor.x, skel.tailAnchor.y);
-    const a = pose.tailAngle + pose.rot;
+    let a = pose.tailAngle + pose.rot;
+    if (dt > 0) {
+      if (Number.isFinite(this.tailBase)) a = this.tailBase + clamp(wrapAngle(a - this.tailBase), -TAIL_BASE_MAX_RATE * dt, TAIL_BASE_MAX_RATE * dt);
+      this.tailBase = a;
+    }
     const angle = skel.facing > 0 ? a : Math.PI - a;
     return { x: p.x, y: p.y, angle };
   }

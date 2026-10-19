@@ -7,10 +7,10 @@
  *  • Ball:  press to pick it up, drag, and let go to throw — the throw speed is
  *           the hand's speed over the last few dozen milliseconds.
  */
-import type { ToyKind } from '../shared/types';
+import type { ToolKind } from '../shared/types';
 import type { World } from './World';
 
-export type ToolKind = ToyKind;
+export type { ToolKind };
 export const TOOL_KINDS: readonly ToolKind[] = ['treat', 'laser', 'ball'];
 
 export interface MotionSample {

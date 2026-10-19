@@ -1,15 +1,18 @@
 /**
  * PopupController — status cards for each cat (live portrait, editable name,
  * state badge, energy/affection meters) plus toys, the food & water station
- * (levels, refill buttons, show / hide), click-through lock, per-site pause, the
- * idle-cuddle delay and size controls. Talks to the active tab's content
- * script and to the service worker; never to the network.
+ * (levels, refill buttons), click-through lock, per-site pause, the idle-cuddle
+ * delay and size controls. v3 adds the toy mouse, quick toggles that show or
+ * hide the bowls and the beds, "Clear all" (removes every toy and treat but
+ * never the cats), tab roaming and a "visiting another tab" status. Talks to
+ * the active tab's content script and to the service worker; never to the network.
  */
 import { isCatState, type CatState } from '../shared/catStates';
 import { displayName, lang, setLanguage, stateLabel, t, translateDom } from '../shared/i18n';
 import { sendRuntime, sendToTab, type HydrateResponse } from '../shared/messages';
-import { loadProfiles, loadSettings, loadStation, patchProfile, patchSettings, patchStation, removeProfile, hostnameMatches, KEY_PROFILES, KEY_STATION, normalizeProfiles, normalizeStation } from '../shared/storage';
-import type { CatProfile, CatRuntimeSnapshot, FeedingStation, PageInfo, PopupAction, Settings } from '../shared/types';
+import { loadBeds, loadProfiles, loadSettings, loadStation, patchBeds, patchProfile, patchSettings, patchStation, removeProfile, hostnameMatches, KEY_BEDS, KEY_PROFILES, KEY_STATION, normalizeBeds, normalizeProfiles, normalizeStation } from '../shared/storage';
+import { LOW_BOWL } from '../sim/FeedingStation';
+import type { CatBedsState, CatProfile, CatRuntimeSnapshot, FeedingStation, PageInfo, PopupAction, Settings } from '../shared/types';
 
 /** Idle-cuddle delays offered in the popup (seconds). */
 const IDLE_CHOICES = [30, 60, 120, 300, 600, 1800];
@@ -36,6 +39,9 @@ class PopupController {
   private last = performance.now();
   private nameTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private station!: FeedingStation;
+  private beds!: CatBedsState;
+  /** Cats off visiting another tab. */
+  private away = new Set<string>();
 
   async init(): Promise<void> {
     this.settings = await loadSettings();
@@ -43,6 +49,7 @@ class PopupController {
     translateDom();
     this.profiles = await loadProfiles();
     this.station = await loadStation();
+    this.beds = await loadBeds();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     this.tabId = tab?.id ?? null;
     if (this.tabId !== null) this.page = await sendToTab<PageInfo>(this.tabId, { type: 'cm:getPageInfo' });
@@ -55,6 +62,10 @@ class PopupController {
       if (area === 'local' && changes[KEY_STATION]) {
         this.station = normalizeStation(changes[KEY_STATION].newValue);
         this.renderStation();
+      }
+      if (area === 'local' && changes[KEY_BEDS]) {
+        this.beds = normalizeBeds(changes[KEY_BEDS].newValue);
+        this.renderQuick();
       }
       if (area !== 'local' || !changes[KEY_PROFILES]) return;
       const next = normalizeProfiles(changes[KEY_PROFILES].newValue);
@@ -188,17 +199,16 @@ class PopupController {
     const enabled = this.profiles.find((p) => p.id === id)?.enabled ?? true;
     const state: CatState = !enabled ? 'CURLED_SLEEP' : snap && isCatState(snap.state) ? snap.state : 'IDLE_SIT';
     card.portrait.setState(state);
-    card.state.textContent = enabled ? stateLabel(state) : t('catOff');
+    card.state.textContent = !enabled ? t('catOff') : this.away.has(id) ? t('visitingTab') : stateLabel(state);
     card.energy.style.width = `${Math.round(snap?.drives.energy ?? 60)}%`;
     card.affection.style.width = `${Math.round(snap?.drives.affection ?? 70)}%`;
   }
 
   private async refreshWorld(): Promise<void> {
     const res = await sendRuntime<HydrateResponse>({ type: 'cm:getWorld' });
-    if (res?.world) {
-      for (const c of res.world.cats) this.snapshots.set(c.id, c);
-      for (const id of this.cards.keys()) this.applySnapshot(id);
-    }
+    if (res) this.away = new Set(res.away ?? []);
+    if (res?.world) for (const c of res.world.cats) this.snapshots.set(c.id, c);
+    if (res) for (const id of this.cards.keys()) this.applySnapshot(id);
   }
 
   private readonly frame = (now: number) => {
@@ -248,9 +258,17 @@ class PopupController {
       this.settings = await patchSettings({ globalPause: (e.target as HTMLInputElement).checked });
       this.renderControls();
     });
-    $('stationOn').addEventListener('change', async (e) => {
-      this.station = await patchStation({ enabled: (e.target as HTMLInputElement).checked });
+    $('toggleStation').addEventListener('click', async () => {
+      this.station = await patchStation({ enabled: !this.station.enabled });
       this.renderStation();
+    });
+    $('toggleBeds').addEventListener('click', async () => {
+      this.beds = await patchBeds({ enabled: !this.beds.enabled });
+      this.renderQuick();
+    });
+    $('clearAll').addEventListener('click', () => void this.action('clear', $('clearAll') as HTMLButtonElement));
+    $('roam').addEventListener('change', async (e) => {
+      this.settings = await patchSettings({ tabRoaming: (e.target as HTMLInputElement).checked });
     });
     $('refillFood').addEventListener('click', async () => {
       this.station = await patchStation({ foodLevel: 100, enabled: true });
@@ -272,7 +290,7 @@ class PopupController {
   private renderStation(): void {
     const st = this.station;
     $('station').classList.toggle('is-off', !st.enabled);
-    ($('stationOn') as HTMLInputElement).checked = st.enabled;
+    const low: string[] = [];
     for (const [kind, level] of [
       ['food', st.foodLevel],
       ['water', st.waterLevel],
@@ -282,8 +300,26 @@ class PopupController {
       $(`${kind}Pct`).textContent = `${pct}%`;
       const meter = $(`${kind}Meter`);
       meter.setAttribute('aria-valuenow', String(pct));
-      meter.closest('.bowl')?.classList.toggle('is-empty', pct <= 5);
+      const bowl = meter.closest('.bowl');
+      bowl?.classList.toggle('is-empty', pct <= 5);
+      bowl?.classList.toggle('is-low', pct > 5 && level <= LOW_BOWL);
+      if (level <= LOW_BOWL) low.push(t(kind));
     }
+    const badge = $('stationLow');
+    badge.hidden = !st.enabled || low.length === 0;
+    badge.textContent = low.length ? `${t('runningLow')}: ${low.join(', ')}` : '';
+    this.renderQuick();
+  }
+
+  /** The "show on the page" chips. */
+  private renderQuick(): void {
+    const st = $('toggleStation');
+    st.setAttribute('aria-pressed', String(!!this.station?.enabled));
+    st.title = t(this.station?.enabled ? 'hideBowls' : 'showBowls');
+    const beds = $('toggleBeds');
+    beds.setAttribute('aria-pressed', String(!!this.beds?.enabled));
+    beds.title = t(this.beds?.enabled ? 'hideBeds' : 'showBeds');
+    $('clearAll').title = t('clearHint');
   }
 
   private renderIdleChoices(): void {
@@ -315,12 +351,14 @@ class PopupController {
     ($('scale') as HTMLInputElement).value = String(s.catScale);
     ($('names') as HTMLInputElement).checked = s.showNameTags;
     ($('calm') as HTMLInputElement).checked = s.calmMode;
+    ($('roam') as HTMLInputElement).checked = s.tabRoaming;
     ($('global') as HTMLInputElement).checked = s.globalPause;
     const reachable = !!this.page && this.page.running;
     document.querySelectorAll<HTMLButtonElement>('.toy').forEach((b) => {
       b.disabled = !reachable;
-      if (b.dataset.action !== 'call') b.setAttribute('aria-pressed', String(this.page?.playTool === b.dataset.action));
+      if (b.dataset.action === 'treat' || b.dataset.action === 'laser' || b.dataset.action === 'ball') b.setAttribute('aria-pressed', String(this.page?.playTool === b.dataset.action));
     });
+    ($('clearAll') as HTMLButtonElement).disabled = !reachable;
     const note = $('note');
     if (!this.page) {
       note.hidden = false;

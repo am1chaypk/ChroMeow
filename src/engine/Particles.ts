@@ -33,6 +33,11 @@ export class ParticleSystem {
     return this.items.length;
   }
 
+  /** Removes every particle (crumbs, splashes, hearts, z's…). */
+  clear(): void {
+    this.items = [];
+  }
+
   emit(kind: ParticleKind, x: number, y: number, n = 1, scale = 1): void {
     for (let i = 0; i < n; i++) {
       if (this.items.length >= MAX_PARTICLES) this.items.shift();

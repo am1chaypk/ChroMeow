@@ -36,6 +36,8 @@ export class PreviewSandbox {
   readonly tool: ToyTool;
   /** Dragging the food & water mat (pointer x offset from the station centre). */
   private matDrag: number | null = null;
+  /** Dragging a cat's bed (its id and the pointer's offset from the bed centre). */
+  private bedDrag: { id: string; offset: number } | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement, settings: Settings = DEFAULT_SETTINGS) {
     this.ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
@@ -51,8 +53,15 @@ export class PreviewSandbox {
         this.world.station.moveTo((p.x - this.matDrag) / this.w);
         return;
       }
+      if (this.bedDrag) {
+        this.world.beds.moveTo(this.bedDrag.id, (p.x - this.bedDrag.offset) / this.w);
+        return;
+      }
+      const b = { width: this.w, height: this.h };
       const over = this.tool.active ? null : this.world.stationHit(p.x, p.y);
-      canvas.style.cursor = this.world.held ? 'grabbing' : over === 'mat' ? 'grab' : over ? 'pointer' : '';
+      const bed = this.tool.active ? null : this.world.beds.hit(p.x, p.y, b);
+      const toy = this.tool.active ? null : this.world.toyAt(p.x, p.y);
+      canvas.style.cursor = this.world.held || this.world.heldToy ? 'grabbing' : over === 'mat' || bed || toy ? 'grab' : over ? 'pointer' : '';
       this.world.pointerMove(p.x, p.y, performance.now() / 1000);
       if (this.tool.holding) this.tool.move(p.x, p.y, e.timeStamp / 1000);
     });
@@ -76,6 +85,23 @@ export class PreviewSandbox {
         this.matDrag = p.x - this.world.station.centerX({ width: this.w, height: this.h });
         canvas.setPointerCapture(e.pointerId);
       } else if (hit) this.world.refill(hit);
+      else {
+        const bounds = { width: this.w, height: this.h };
+        const bed = this.world.beds.hit(p.x, p.y, bounds);
+        const g = bed ? this.world.beds.geom(bed, bounds) : null;
+        if (bed && g) {
+          this.bedDrag = { id: bed, offset: p.x - g.cx };
+          canvas.setPointerCapture(e.pointerId);
+        }
+      }
+    });
+    // Right-click a cat: drop the toy mouse in front of it (the page's games menu, in miniature).
+    canvas.addEventListener('contextmenu', (e) => {
+      const p = this.local(e);
+      const cat = this.world.hitTest(p.x, p.y);
+      if (!cat) return;
+      e.preventDefault();
+      this.world.releaseMouse(Math.min(this.w - 30, Math.max(30, cat.x + cat.facing * 160)));
     });
     canvas.addEventListener('pointerup', (e) => {
       const p = this.local(e);
@@ -84,11 +110,13 @@ export class PreviewSandbox {
         return;
       }
       this.matDrag = null;
+      this.bedDrag = null;
       this.world.pointerUp(p.x, p.y);
     });
     canvas.addEventListener('lostpointercapture', () => {
       this.tool.cancel();
       this.matDrag = null;
+      this.bedDrag = null;
       this.world.pointerCancel();
     });
     canvas.addEventListener('pointerleave', () => this.world.pointerLeave());

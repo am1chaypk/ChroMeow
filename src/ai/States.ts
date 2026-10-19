@@ -335,3 +335,28 @@ export function restorableState(s: CatState): CatState {
   if (meta.locomotion) return 'IDLE_STAND';
   return s;
 }
+
+/**
+ * Static, settled postures in which a cat's tail lies completely still (v3):
+ * sitting, loafing, watching the cursor or the keyboard, resting on a ledge and
+ * every kind of sleep. Annoyed or playful states (TAIL_LASH, the judgmental
+ * squint, belly-up kicks, grooming…) keep their tail motion.
+ */
+export const TAIL_STILL_STATES: ReadonlySet<CatState> = new Set<CatState>([
+  'IDLE_SIT',
+  'CAT_LOAF',
+  'SPHINX_POSE',
+  'DANGLE_PAWS',
+  'CURSOR_GAZE',
+  'KEYBOARD_WATCH',
+  'PURRING',
+  'LEDGE_CHIN_REST',
+  'WIDE_PAW_SPLAY',
+  'EMPTY_BOWL_WAIT',
+  'ALLOGROOM_RECEIVE',
+  ...SLEEP_STATES,
+]);
+
+export function isTailStill(s: CatState): boolean {
+  return TAIL_STILL_STATES.has(s);
+}

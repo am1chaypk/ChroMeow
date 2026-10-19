@@ -18,12 +18,33 @@
  *
  * Cats prefer their bonded partner (traits.bondedWith), and cats with a high
  * social initiative choose grooming and cuddles over boops and chases.
+ *
+ * v3 anti-overlap: every frame the coordinator measures personal space between
+ * cats on the same ledge and hands each a separation push (CatAgent turns it
+ * into a speed nudge while moving, or steps aside once settled) — except for
+ * pairs in a session together (cuddles, grooming, boops, play). Choreographed
+ * pair transitions are staggered by 2–5 s so the two never mirror each other,
+ * and the idle cuddle happens in the cats' own beds when they are out.
  */
 import { clamp, dist } from '../shared/math';
 import type { CatState } from '../shared/catStates';
+import type { Rng } from '../shared/rng';
 import { platformWidth } from '../engine/Physics';
-import type { AgentEnv, CatAgent, SocialHooks, Task } from '../sim/CatAgent';
+import { PERSONAL_SPACE, type AgentEnv, type CatAgent, type SocialHooks, type Task } from '../sim/CatAgent';
 import type { IntentKind } from './UtilityBrain';
+
+/** Stagger between two cats reacting to the same event (seconds). */
+export const STAGGER_MIN = 2;
+export const STAGGER_MAX = 5;
+
+export function staggerDelay(rng: Rng): number {
+  return STAGGER_MIN + rng.next() * (STAGGER_MAX - STAGGER_MIN);
+}
+
+/** A held pause at the start of a plan (the second cat follows a few seconds later). */
+function hold(delay: number): Task {
+  return { kind: 'wait', until: () => false, maxTime: delay };
+}
 
 export type SocialKind = 'boop' | 'allogroom' | 'yinyang' | 'tandem' | 'pillow' | 'play' | 'jealousy' | 'idle';
 
@@ -403,6 +424,8 @@ export class SocialCoordinator implements SocialHooks {
     );
     draper.setPlan(
       [
+        // The second cat follows a few seconds later (never in lockstep).
+        hold(staggerDelay(draper.rng)),
         { kind: 'goto', spot: { platformId: spot.platformId, x: xDraper }, gait: 'SAUNTER_WALK', maxTime: 40 },
         { kind: 'wait', until: both, maxTime: 40, face: towards(draper, pillow) },
         { kind: 'state', state: 'ALLOGROOMING', dur: lick, face: towards(draper, pillow) },
@@ -417,9 +440,19 @@ export class SocialCoordinator implements SocialHooks {
     return true;
   }
 
-  /** A spot both cats can reach: a wide ledge they already share, otherwise the floor between them, clear of the bowls. */
+  /**
+   * A spot both cats can reach: the pillow cat's own bed when the beds are out
+   * (it curls up on its cushion, the other drapes over the bolster beside it), a
+   * wide ledge they already share, otherwise the floor between them, clear of the bowls.
+   */
   private cuddleSpot(a: CatAgent, b: CatAgent, env: AgentEnv): { platformId: string; x: number; face: 1 | -1 } {
     const L = Math.max(a.bodyLen(), b.bodyLen());
+    const bed = env.beds?.spotFor(a.id, env.bounds) ?? env.beds?.spotFor(b.id, env.bounds) ?? null;
+    if (bed) {
+      // The draper lies on the side with more room.
+      const face: 1 | -1 = bed.x < env.bounds.width / 2 ? -1 : 1;
+      return { platformId: 'floor', x: bed.x - face * L * 0.3, face };
+    }
     const pa = a.currentPlatform(env);
     let plat = pa && pa.kind === 'dom' && a.groundId === b.groundId && platformWidth(pa) > L * 2.8 ? pa : env.source.floor();
     if (!plat) plat = env.source.floor();
@@ -461,7 +494,10 @@ export class SocialCoordinator implements SocialHooks {
     const greeter = a.profile.personality.affection >= b.profile.personality.affection ? a : b;
     for (const c of [a, b]) {
       const wake: Task[] = [];
+      // The second sleeper wakes 2–5 s after the first, so they never stretch and yawn in unison.
+      const late = c !== greeter ? staggerDelay(c.rng) : 0;
       if (c.isAsleep()) {
+        if (late > 0) wake.push({ kind: 'state', state: c.state, dur: late });
         wake.push(
           { kind: 'do', fn: () => c.slowBlink() },
           { kind: 'state', state: c.state, dur: 1.5 },
@@ -488,6 +524,7 @@ export class SocialCoordinator implements SocialHooks {
           { kind: 'state', state: 'CURSOR_GAZE', dur: 6, face: () => ((c.liveEnv ?? env).cursor.x >= c.x ? 1 : -1) },
         );
       } else {
+        if (!c.isAsleep() && late > 0) wake.push(hold(late));
         wake.push({ kind: 'state', state: 'IDLE_SIT', dur: c.rng.range(2, 4) }, { kind: 'state', state: 'GROOM_WASH_FACE', dur: 99 });
       }
       c.setPlan(wake, 'idle-wake', true);
@@ -496,8 +533,44 @@ export class SocialCoordinator implements SocialHooks {
 
   /* --------------------------------------------------------------- update */
 
+  /** True when two cats are meant to be close right now (a shared session: cuddle, grooming, boop, play…). */
+  static together(a: CatAgent, b: CatAgent): boolean {
+    return (!!a.social && a.social.partner === b) || (!!b.social && b.social.partner === a);
+  }
+
+  /**
+   * Personal space: for every pair on the same ledge closer than
+   * PERSONAL_SPACE × their mean body length, a push of 0..1 (scaled by how deep
+   * the overlap is) away from each other. Sleepers and pairs in a session together
+   * are left alone.
+   */
+  separate(agents: CatAgent[], width = Infinity): void {
+    for (const a of agents) a.separation = 0;
+    const offscreen = (c: CatAgent) => c.parked || c.x < 0 || c.x > width;
+    for (let i = 0; i < agents.length; i++) {
+      for (let j = i + 1; j < agents.length; j++) {
+        const a = agents[i];
+        const b = agents[j];
+        if (!a.groundId || a.groundId !== b.groundId) continue;
+        // Nobody can see them out there (walking off to another tab / window).
+        if (offscreen(a) || offscreen(b)) continue;
+        if (a.isHeld() || b.isHeld() || a.isAirborne() || b.isAirborne()) continue;
+        if (SocialCoordinator.together(a, b) || (a.isAsleep() && b.isAsleep())) continue;
+        const ps = ((a.bodyLen() + b.bodyLen()) / 2) * PERSONAL_SPACE;
+        const dx = b.x - a.x;
+        if (Math.abs(dx) >= ps) continue;
+        const push = (ps - Math.abs(dx)) / ps;
+        const dir = dx !== 0 ? (dx > 0 ? -1 : 1) : a.id < b.id ? -1 : 1;
+        // A sleeping cat stays put; the awake one does all the moving.
+        if (!a.isAsleep()) a.separation = clamp(a.separation + dir * push * (b.isAsleep() ? 2 : 1), -1, 1);
+        if (!b.isAsleep()) b.separation = clamp(b.separation - dir * push * (a.isAsleep() ? 2 : 1), -1, 1);
+      }
+    }
+  }
+
   update(agents: CatAgent[], env: AgentEnv): void {
     const now = env.now;
+    this.separate(agents, env.bounds.width);
     // Validate running sessions.
     for (const s of [...this.sessions]) {
       // A partner switched off or removed mid-session ends it cleanly.

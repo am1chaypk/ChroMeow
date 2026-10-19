@@ -18,6 +18,10 @@
  *    escape the cat and start selecting text on the page.
  *  • A hitbox over the food & water station lets you click a bowl to refill it
  *    and drag the mat along the floor.
+ *  • v3: right-clicking a cat opens the mini-games menu instead of the
+ *    browser's context menu; each cat's bed has a hitbox to drag it along the
+ *    floor; small round hitboxes over the ball and the toy mouse let you pick
+ *    them straight up off the page.
  */
 import type { Landmarks } from '../engine/ArticulatedCatRenderer';
 import type { Rect } from '../sim/World';
@@ -37,7 +41,18 @@ canvas.stage {
   -webkit-tap-highlight-color: transparent;
 }
 .cat-hitbox:active { cursor: grabbing; }
-.hit-layer.locked .cat-hitbox, .hit-layer.locked .station-hitbox { pointer-events: none; display: none; }
+.hit-layer.locked .cat-hitbox, .hit-layer.locked .station-hitbox, .hit-layer.locked .bed-hitbox, .hit-layer.locked .toy-hitbox { pointer-events: none; display: none; }
+.bed-hitbox {
+  position: fixed; left: 0; top: 0; width: 1px; height: 1px;
+  pointer-events: auto; background: transparent; cursor: grab;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.bed-hitbox.is-dragging { cursor: grabbing; }
+.toy-hitbox {
+  position: fixed; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%;
+  pointer-events: auto; background: transparent; cursor: grab;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
 .station-hitbox {
   position: fixed; left: 0; top: 0; width: 1px; height: 1px; display: none;
   pointer-events: auto; background: transparent; cursor: pointer;
@@ -56,6 +71,13 @@ export interface HitboxHandlers {
   up(x: number, y: number, e: PointerEvent): void;
   /** Pointer capture was lost mid-drag without a pointerup. */
   lost?(): void;
+  /** Right-click on a cat (the browser's own context menu is suppressed). */
+  context?(catId: string, x: number, y: number): void;
+}
+
+export interface BedHandlers {
+  /** Dragging a bed: x is the bed centre's new viewport x. */
+  drag(id: string, x: number, phase: 'start' | 'move' | 'end'): void;
 }
 
 export interface StationHandlers {
@@ -85,6 +107,10 @@ export class ShadowDOMOverlay {
   private stationDrag: { pointerId: number; offset: number } | null = null;
   private lockedPointer: number | null = null;
   private readonly blockSelect = (e: Event) => e.preventDefault();
+  private readonly bedBoxes = new Map<string, HTMLDivElement>();
+  private bedHandlers: BedHandlers | null = null;
+  private bedDrag: { id: string; pointerId: number; offset: number } | null = null;
+  private readonly toyBoxes = new Map<number, HTMLDivElement>();
 
   constructor(private readonly handlers: HitboxHandlers) {
     this.host = document.createElement('div');
@@ -121,6 +147,8 @@ export class ShadowDOMOverlay {
     window.removeEventListener('resize', this.onResize);
     this.host.remove();
     this.hitboxes.clear();
+    this.bedBoxes.clear();
+    this.toyBoxes.clear();
   }
 
   /** Re-attaches the host if a single-page app wiped <html>'s children. */
@@ -290,6 +318,116 @@ export class ShadowDOMOverlay {
     }
   }
 
+  /* -------------------------------------------------------- bed hitboxes */
+
+  setBedHandlers(h: BedHandlers | null): void {
+    this.bedHandlers = h;
+  }
+
+  /** Places one drag hitbox per bed (an empty list removes them). */
+  syncBeds(beds: { id: string; rect: { minX: number; minY: number; maxX: number; maxY: number } }[]): void {
+    const seen = new Set<string>();
+    for (const { id, rect } of beds) {
+      seen.add(id);
+      let el = this.bedBoxes.get(id);
+      if (!el) {
+        el = this.createBedBox(id);
+        this.bedBoxes.set(id, el);
+      }
+      el.style.display = this.clickThrough ? 'none' : 'block';
+      el.style.transform = `translate(${Math.floor(rect.minX)}px, ${Math.floor(rect.minY)}px)`;
+      el.style.width = `${Math.ceil(rect.maxX - rect.minX)}px`;
+      el.style.height = `${Math.ceil(rect.maxY - rect.minY)}px`;
+    }
+    for (const [id, el] of this.bedBoxes) {
+      if (seen.has(id) || this.bedDrag?.id === id) continue;
+      el.remove();
+      this.bedBoxes.delete(id);
+    }
+  }
+
+  private createBedBox(id: string): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'bed-hitbox';
+    el.dataset.bed = id;
+    el.addEventListener('pointerdown', (e) => {
+      const h = this.bedHandlers;
+      if (!h || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const r = el.getBoundingClientRect();
+      this.bedDrag = { id, pointerId: e.pointerId, offset: e.clientX - (r.left + r.width / 2) };
+      el.classList.add('is-dragging');
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      h.drag(id, e.clientX - this.bedDrag.offset, 'start');
+    });
+    el.addEventListener('pointermove', (e) => {
+      const d = this.bedDrag;
+      if (!d || d.id !== id || e.pointerId !== d.pointerId) return;
+      e.preventDefault();
+      this.bedHandlers?.drag(id, e.clientX - d.offset, 'move');
+    });
+    const end = (e: PointerEvent) => {
+      const d = this.bedDrag;
+      if (!d || d.id !== id || e.pointerId !== d.pointerId) return;
+      this.bedHandlers?.drag(id, e.clientX - d.offset, 'end');
+      this.bedDrag = null;
+      el.classList.remove('is-dragging');
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    for (const type of ['click', 'dblclick', 'mousedown', 'mouseup', 'auxclick']) {
+      el.addEventListener(type, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    }
+    this.hitLayer.appendChild(el);
+    return el;
+  }
+
+  /* -------------------------------------------------------- toy hitboxes */
+
+  /**
+   * Round hitboxes over toys that can be picked up (the ball, the mouse). The
+   * press itself is handled by the world through the page-wide pointer
+   * listener; the hitbox just keeps the click from reaching the page below.
+   */
+  syncToys(toys: { id: number; x: number; y: number; r: number }[]): void {
+    const seen = new Set<number>();
+    for (const t of toys) {
+      seen.add(t.id);
+      let el = this.toyBoxes.get(t.id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'toy-hitbox';
+        el.dataset.toy = String(t.id);
+        for (const type of ['pointerdown', 'click', 'dblclick', 'mousedown', 'mouseup', 'auxclick']) {
+          el.addEventListener(type, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
+        }
+        this.hitLayer.appendChild(el);
+        this.toyBoxes.set(t.id, el);
+      }
+      el.style.display = this.clickThrough ? 'none' : 'block';
+      const d = Math.ceil(t.r * 2);
+      el.style.transform = `translate(${Math.floor(t.x - t.r)}px, ${Math.floor(t.y - t.r)}px)`;
+      el.style.width = `${d}px`;
+      el.style.height = `${d}px`;
+    }
+    for (const [id, el] of this.toyBoxes) {
+      if (seen.has(id)) continue;
+      el.remove();
+      this.toyBoxes.delete(id);
+    }
+  }
+
   /** Positions each cat's interactive proxy hitbox over its body (clip-path = convex hull). */
   syncHitboxes(cats: { id: string; lm: Landmarks | null; state?: string; ground?: string | null }[]): void {
     const seen = new Set<string>();
@@ -352,13 +490,19 @@ export class ShadowDOMOverlay {
       e.stopPropagation();
       this.handlers.up(e.clientX, e.clientY, e);
     });
-    for (const type of ['click', 'dblclick', 'mousedown', 'mouseup', 'contextmenu', 'auxclick']) {
+    for (const type of ['click', 'dblclick', 'mousedown', 'mouseup', 'auxclick']) {
       el.addEventListener(type, (e) => {
-        if (type === 'contextmenu') return; // keep the browser context menu available
         e.preventDefault();
         stop(e);
       });
     }
+    // Right-click on a cat: the mini-games menu instead of the browser's context menu.
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      stop(e);
+      const me = e as MouseEvent;
+      this.handlers.context?.(id, me.clientX, me.clientY);
+    });
     el.addEventListener('wheel', () => undefined, { passive: true });
     this.hitLayer.appendChild(el);
     return el;

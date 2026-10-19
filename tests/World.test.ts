@@ -78,8 +78,12 @@ describe('food & water station', () => {
     a.drives.hunger = 88;
     run(w, 60, () => a.state === 'EMPTY_BOWL_WAIT');
     expect(a.state).toBe('EMPTY_BOWL_WAIT');
-    run(w, 9);
-    expect(w.particles.count).toBeGreaterThan(0); // the fish thought bubble
+    let bubbles = 0;
+    run(w, 9, () => {
+      bubbles = Math.max(bubbles, w.particles.count);
+      return false;
+    });
+    expect(bubbles).toBeGreaterThan(0); // the fish thought bubble
     w.refill('food');
     expect(w.station.level('food')).toBe(100);
     const seen = run(w, 40, () => a.state === 'EATING').get('alex') as CatState[];

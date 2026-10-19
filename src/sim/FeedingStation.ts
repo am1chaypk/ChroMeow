@@ -5,6 +5,9 @@
  *
  *  • Levels (0..100) go down as cats eat and drink and are saved to
  *    chrome.storage.local by the page, so every tab shares the same bowls.
+ *  • v3: the bowls also empty slowly on their own (kibble gets nibbled and goes
+ *    stale, water evaporates and gets splashed) — continuously while the cats
+ *    are on screen, and at half rate (capped) for the time no page showed them.
  *  • Clicking a bowl refills it; dragging the mat slides it along the floor.
  *  • Drawn in two layers: the mat, bowl insides and contents behind the cats,
  *    the bowls' front walls in front of them — so a cat's muzzle dips *into*
@@ -30,12 +33,43 @@ export type StationHit = BowlKind | 'mat' | null;
 /** How long a cat's claim on a bowl lasts without being renewed (s). */
 const CLAIM_TTL = 1.5;
 
+/** Passive depletion per second while the cats are around: ≈ 14 % of the food and ≈ 22 % of the water per hour. */
+export const FOOD_DECAY = 0.004;
+export const WATER_DECAY = 0.006;
+/** A bowl at or below this is running low: hungry / thirsty cats keep checking it and asking for more. */
+export const LOW_BOWL = 20;
+/** While no page shows the cats, bowls empty at this fraction of the normal rate… */
+export const OFFLINE_DECAY_RATE = 0.5;
+/** …but never by more than this many points per absence. */
+export const OFFLINE_DECAY_CAP = 35;
+
+/** Pure: the levels after `seconds` of passive depletion at `rate`× the normal speed. */
+export function decayLevels(st: FeedingStation, seconds: number, rate = 1, cap = Infinity): FeedingStation {
+  const s = Math.max(0, seconds) * Math.max(0, rate);
+  const food = Math.min(cap, s * FOOD_DECAY);
+  const water = Math.min(cap, s * WATER_DECAY);
+  return { ...st, foodLevel: Math.max(0, st.foodLevel - food), waterLevel: Math.max(0, st.waterLevel - water) };
+}
+
+/** Pure: applies the (half-rate, capped) depletion for the time since the levels were last written. */
+export function catchUpStation(st: FeedingStation, nowMs: number): FeedingStation {
+  if (!st.updatedAt || nowMs <= st.updatedAt) return { ...st };
+  const away = (nowMs - st.updatedAt) / 1000;
+  // Short gaps (switching tabs, a reload) are already covered by the running page.
+  if (away < 20) return { ...st };
+  return decayLevels(st, away, OFFLINE_DECAY_RATE, OFFLINE_DECAY_CAP);
+}
+
 export class StationModel {
   state: FeedingStation;
   /** Scale of the station drawing (follows the cats' size setting). */
   scale = 1;
   /** Set whenever levels or position change; the page persists and clears it. */
   dirty = false;
+  /** Bowls empty slowly on their own (only the page hosting the cats runs this). */
+  depleting = true;
+  /** Passive depletion accumulated since the levels were last marked dirty. */
+  private drift = 0;
   private claims: Record<BowlKind, { id: string; at: number } | null> = { food: null, water: null };
   private now = 0;
   /** Visual "just refilled" pulse per bowl (s remaining). */
@@ -56,6 +90,17 @@ export class StationModel {
 
   update(dt: number, now: number): void {
     this.now = now;
+    if (this.depleting && this.state.enabled && dt > 0) {
+      const next = decayLevels(this.state, dt);
+      this.drift += this.state.foodLevel - next.foodLevel + (this.state.waterLevel - next.waterLevel);
+      this.state.foodLevel = next.foodLevel;
+      this.state.waterLevel = next.waterLevel;
+      // Persist every half point or so (a couple of minutes), not every frame.
+      if (this.drift >= 0.5) {
+        this.drift = 0;
+        this.dirty = true;
+      }
+    }
     for (const k of ['food', 'water'] as BowlKind[]) {
       if (this.refillGlow[k] > 0) this.refillGlow[k] = Math.max(0, this.refillGlow[k] - dt);
       const c = this.claims[k];
@@ -65,6 +110,11 @@ export class StationModel {
 
   level(kind: BowlKind): number {
     return kind === 'food' ? this.state.foodLevel : this.state.waterLevel;
+  }
+
+  /** True when the bowl is running low (≤ LOW_BOWL). */
+  low(kind: BowlKind): boolean {
+    return this.level(kind) <= LOW_BOWL;
   }
 
   /** Takes up to `amount` from a bowl; returns what was actually taken. */

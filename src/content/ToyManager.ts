@@ -1,14 +1,16 @@
 /**
- * ToyManager — treats, a bouncy toy ball and a laser dot. Toys live in the same
- * physical world as the cats (they land on DOM ledges, bounce off the viewport
- * edges) and cats chase, bat, pounce on and eat them. DOM-free, so the Cat
- * Studio preview sandbox reuses it.
+ * ToyManager — treats, a bouncy toy ball, a laser dot and (v3) a toy mouse on a
+ * string. Toys live in the same physical world as the cats (they land on DOM
+ * ledges, bounce off the viewport edges) and cats chase, bat, pounce on and eat
+ * them. Balls and mice can be picked up and thrown straight from the page.
+ * DOM-free, so the Cat Studio preview sandbox reuses it.
  */
 import { clamp, lerp } from '../shared/math';
 import { Rng } from '../shared/rng';
 import type { ToyKind } from '../shared/types';
 import type { AnyCtx } from '../engine/canvas';
 import { GRAVITY, findLanding, type Platform, type WorldBounds } from '../engine/Physics';
+import { catchMouse, createMouse, drawMouse, holdMouse, stepMouse, type MouseBody, type Threat } from '../sim/MouseToy';
 
 export interface Toy {
   id: number;
@@ -31,9 +33,14 @@ export interface Toy {
   idle: number;
   /** Laser steered by the user's mouse (no autonomous wandering). */
   controlled?: boolean;
-  /** Ball currently held under the cursor (not yet thrown). */
+  /** Ball / mouse currently held under the cursor (not yet thrown). */
   held?: boolean;
+  /** The toy mouse's body, behaviour and string. */
+  mouse?: MouseBody;
 }
+
+/** Toys a hand can pick straight up off the page and throw. */
+export const GRABBABLE: readonly ToyKind[] = ['ball', 'mouse'];
 
 /** Max simultaneous treats; clicking more replaces the oldest. */
 const MAX_TREATS = 12;
@@ -52,9 +59,95 @@ export class ToyManager {
   }
 
   private make(kind: ToyKind, x: number, y: number): Toy {
-    const t: Toy = { id: this.nextId++, kind, x, y, vx: 0, vy: 0, ground: null, age: 0, life: kind === 'treat' ? 90 : kind === 'ball' ? 60 : 16, eaten: 0, claimedBy: null, tx: x, ty: y, retarget: 0, spin: 0, idle: 0 };
+    const life = kind === 'treat' ? 90 : kind === 'ball' ? 60 : kind === 'mouse' ? 150 : 16;
+    const t: Toy = { id: this.nextId++, kind, x, y, vx: 0, vy: 0, ground: null, age: 0, life, eaten: 0, claimedBy: null, tx: x, ty: y, retarget: 0, spin: 0, idle: 0 };
     this.toys.push(t);
     return t;
+  }
+
+  /** Drops the toy mouse in (one at a time): it lands and starts running about. */
+  spawnMouse(bounds: WorldBounds, x?: number, y = -10): Toy {
+    this.toys = this.toys.filter((t) => t.kind !== 'mouse');
+    const px = x ?? bounds.width * (0.25 + this.rng.next() * 0.5);
+    const t = this.make('mouse', px, y);
+    t.mouse = createMouse(px, y, this.rng.chance(0.5) ? 1 : -1);
+    return t;
+  }
+
+  /** The toy under a point that a hand can pick up (a ball or the mouse), if any. */
+  grabbableAt(x: number, y: number): Toy | null {
+    for (let i = this.toys.length - 1; i >= 0; i--) {
+      const t = this.toys[i];
+      if (t.held || !GRABBABLE.includes(t.kind)) continue;
+      const cy = t.kind === 'mouse' ? t.y - 5 : t.y;
+      const r = t.kind === 'mouse' ? 15 : BALL_R + 7;
+      if (Math.hypot(x - t.x, y - cy) <= r) return t;
+    }
+    return null;
+  }
+
+  /** Picks up (or carries) a specific toy under the cursor. */
+  holdToy(toy: Toy, x: number, y: number): void {
+    if (!this.toys.includes(toy)) return;
+    for (const o of this.toys) if (o !== toy) o.held = false;
+    toy.held = true;
+    if (toy.kind === 'ball') toy.spin += (x - toy.x) / BALL_R;
+    toy.x = x;
+    toy.y = toy.kind === 'mouse' ? y + 5 : y;
+    toy.vx = 0;
+    toy.vy = 0;
+    toy.ground = null;
+    toy.age = 0;
+    toy.idle = 0;
+  }
+
+  /** The toy currently in hand, if any. */
+  get heldToy(): Toy | null {
+    return this.toys.find((t) => t.held) ?? null;
+  }
+
+  /** Lets go of whatever toy is in hand with the hand's velocity. */
+  throwToy(vx: number, vy: number): Toy | null {
+    const t = this.heldToy;
+    if (!t) return null;
+    const sp = Math.hypot(vx, vy);
+    const k = sp > MAX_THROW ? MAX_THROW / sp : 1;
+    t.held = false;
+    t.vx = vx * k;
+    t.vy = vy * k;
+    t.idle = 0;
+    t.age = 0;
+    if (t.mouse) {
+      t.mouse.vx = t.vx;
+      t.mouse.vy = t.vy;
+      t.mouse.ground = null;
+    }
+    return t;
+  }
+
+  /** A cat pinned the mouse (or its string, right by the mouse). */
+  pinMouse(toy: Toy): void {
+    if (!toy.mouse) return;
+    catchMouse(toy.mouse, this.rng);
+    // Worn out after its last escape: it stays as a limp toy for a while, then is tidied away.
+    if (toy.mouse.catches >= 3) toy.life = Math.min(toy.life, toy.age + 40);
+  }
+
+  /** A paw swat at the mouse's string near (x, y): it swings and the mouse startles. */
+  batString(toy: Toy, x: number, y: number, dirX: number): boolean {
+    const m = toy.mouse;
+    if (!m) return false;
+    const i = m.rope.nearest(x, y, 26);
+    if (i < 0) return false;
+    m.rope.bat(i, dirX * lerp(160, 320, this.rng.next()), -lerp(120, 260, this.rng.next()));
+    return true;
+  }
+
+  /** Removes every temporary object (treats, balls, the laser dot, the mouse and its leftovers). */
+  clear(): number {
+    const n = this.toys.length;
+    this.toys = [];
+    return n;
   }
 
   spawnTreat(bounds: WorldBounds, x?: number): Toy {
@@ -152,13 +245,16 @@ export class ToyManager {
     this.toys = this.toys.filter((t) => t !== toy);
   }
 
-  nearest(x: number, y: number, kinds: readonly ToyKind[] = ['treat', 'ball', 'laser']): Toy | null {
+  nearest(x: number, y: number, kinds: readonly ToyKind[] = ['treat', 'ball', 'laser', 'mouse']): Toy | null {
     let best: Toy | null = null;
     let bd = Infinity;
     for (const t of this.toys) {
       if (!kinds.includes(t.kind)) continue;
       if (t.kind === 'treat' && t.eaten >= 1) continue;
-      if (t.held) continue;
+      // A worn-out mouse is just a toy lying about now.
+      if (t.mouse && t.mouse.mode === 'limp') continue;
+      // A ball in hand isn't up for grabs — but a mouse dangling from your hand is the best game there is.
+      if (t.held && t.kind !== 'mouse') continue;
       const d = Math.hypot(t.x - x, t.y - y);
       if (d < bd) {
         bd = d;
@@ -175,6 +271,14 @@ export class ToyManager {
       toy.vy = -lerp(160, 360, Math.random()) * power;
       toy.ground = null;
       toy.idle = 0;
+    } else if (toy.mouse) {
+      // Batted: the mouse tumbles a little way and lands running.
+      const m = toy.mouse;
+      if (m.mode === 'caught') return;
+      m.ground = null;
+      m.vx = dirX * lerp(140, 260, Math.random()) * power;
+      m.vy = -lerp(140, 240, Math.random()) * power;
+      m.dir = dirX >= 0 ? 1 : -1;
     } else if (toy.kind === 'laser' && !toy.controlled) {
       toy.retarget = 0;
       toy.tx = clamp(toy.x + dirX * lerp(160, 360, Math.random()), 10, 4000);
@@ -191,16 +295,31 @@ export class ToyManager {
     return false;
   }
 
-  update(dt: number, platforms: readonly Platform[], bounds: WorldBounds): void {
+  update(dt: number, platforms: readonly Platform[], bounds: WorldBounds, cats: readonly Threat[] = []): void {
     const keep: Toy[] = [];
     for (const t of this.toys) {
       t.age += dt;
+      if (t.held) t.age = 0;
       if (t.age > t.life) continue;
       if (t.kind === 'laser') this.updateLaser(t, dt, platforms, bounds);
+      else if (t.mouse) this.updateMouse(t, dt, platforms, bounds, cats);
       else if (!t.held) this.updateBody(t, dt, platforms, bounds);
       keep.push(t);
     }
     this.toys = keep;
+  }
+
+  private updateMouse(t: Toy, dt: number, platforms: readonly Platform[], bounds: WorldBounds, cats: readonly Threat[]): void {
+    const m = t.mouse as MouseBody;
+    if (t.held) holdMouse(m, t.x, t.y - 5, dt, platforms, bounds);
+    else {
+      stepMouse(m, dt, platforms, bounds, cats, this.rng);
+      t.x = m.x;
+      t.y = m.y;
+      t.vx = m.vx;
+      t.vy = m.vy;
+      t.ground = m.ground;
+    }
   }
 
   private updateBody(t: Toy, dt: number, platforms: readonly Platform[], bounds: WorldBounds): void {
@@ -301,7 +420,15 @@ export class ToyManager {
     for (const t of this.toys) {
       const fade = Math.min(1, (t.life - t.age) / 1.2);
       ctx.globalAlpha = Math.max(0, fade);
-      if (t.kind === 'treat') {
+      if (t.mouse) {
+        drawMouse(ctx, t.mouse, !!t.held);
+        for (const n of t.mouse.rope.nodes) {
+          minX = Math.min(minX, n.x - 6);
+          minY = Math.min(minY, n.y - 6);
+          maxX = Math.max(maxX, n.x + 6);
+          maxY = Math.max(maxY, n.y + 6);
+        }
+      } else if (t.kind === 'treat') {
         const s = 1 - t.eaten * 0.85;
         ctx.save();
         ctx.translate(t.x, t.y);

@@ -4,12 +4,14 @@
  *  • chrome.storage.session — the live cross-tab world snapshot (service worker only)
  */
 import { defaultProfiles, migrateProfile, normalizeProfile, MAX_CATS } from './presets';
-import type { CatProfile, FeedingStation, Settings, WorldSnapshot } from './types';
+import type { CatBedsState, CatProfile, FeedingStation, Settings, WorldSnapshot } from './types';
 
 export const KEY_PROFILES = 'chromeow:profiles';
 export const KEY_SETTINGS = 'chromeow:settings';
 export const KEY_WORLD = 'chromeow:world';
 export const KEY_STATION = 'chromeow:station';
+export const KEY_BEDS = 'chromeow:beds';
+export const KEY_INSTANCE = 'chromeow:instance';
 
 export const DEFAULT_STATION: FeedingStation = {
   enabled: true,
@@ -29,7 +31,10 @@ export const DEFAULT_SETTINGS: Settings = {
   showNameTags: true,
   calmMode: false,
   idleThreshold: 120,
+  tabRoaming: true,
 };
+
+export const DEFAULT_BEDS: CatBedsState = { enabled: true, positions: {} };
 
 function hasChromeStorage(): boolean {
   return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local;
@@ -62,6 +67,7 @@ export function normalizeSettings(raw: unknown): Settings {
     ...s,
     blacklist: Array.isArray(s.blacklist) ? s.blacklist.filter((h) => typeof h === 'string') : [],
     catScale: typeof s.catScale === 'number' ? Math.min(1.8, Math.max(0.5, s.catScale)) : DEFAULT_SETTINGS.catScale,
+    tabRoaming: typeof s.tabRoaming === 'boolean' ? s.tabRoaming : DEFAULT_SETTINGS.tabRoaming,
     idleThreshold:
       typeof s.idleThreshold === 'number' && Number.isFinite(s.idleThreshold)
         ? Math.round(Math.min(IDLE_THRESHOLD_RANGE[1], Math.max(IDLE_THRESHOLD_RANGE[0], s.idleThreshold)))
@@ -80,7 +86,19 @@ export function normalizeStation(raw: unknown): FeedingStation {
     xNormalized: typeof s.xNormalized === 'number' && Number.isFinite(s.xNormalized) ? Math.min(1, Math.max(0, s.xNormalized)) : DEFAULT_STATION.xNormalized,
     foodLevel: level(s.foodLevel, DEFAULT_STATION.foodLevel),
     waterLevel: level(s.waterLevel, DEFAULT_STATION.waterLevel),
+    ...(typeof s.updatedAt === 'number' && Number.isFinite(s.updatedAt) && s.updatedAt > 0 ? { updatedAt: s.updatedAt } : {}),
   };
+}
+
+export function normalizeBeds(raw: unknown): CatBedsState {
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<CatBedsState>;
+  const positions: Record<string, number> = {};
+  if (s.positions && typeof s.positions === 'object') {
+    for (const [id, v] of Object.entries(s.positions)) {
+      if (typeof v === 'number' && Number.isFinite(v) && /^[\w-]{1,64}$/.test(id)) positions[id] = Math.min(1, Math.max(0, v));
+    }
+  }
+  return { enabled: typeof s.enabled === 'boolean' ? s.enabled : DEFAULT_BEDS.enabled, positions };
 }
 
 export function normalizeProfiles(raw: unknown): CatProfile[] {
@@ -136,11 +154,12 @@ export async function removeProfile(id: string): Promise<CatProfile[]> {
 
 /** Writes factory defaults on first install (and migrates older data) without clobbering user data. */
 export async function ensureDefaults(): Promise<void> {
-  const [profiles, settings, station] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS), localGet(KEY_STATION)]);
+  const [profiles, settings, station, beds] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS), localGet(KEY_STATION), localGet(KEY_BEDS)]);
   if (!Array.isArray(profiles) || profiles.length === 0) await localSet(KEY_PROFILES, defaultProfiles());
   else await localSet(KEY_PROFILES, normalizeProfiles(profiles));
   await localSet(KEY_SETTINGS, normalizeSettings(settings));
   await localSet(KEY_STATION, normalizeStation(station));
+  await localSet(KEY_BEDS, normalizeBeds(beds));
 }
 
 export async function loadStation(): Promise<FeedingStation> {
@@ -150,6 +169,17 @@ export async function loadStation(): Promise<FeedingStation> {
 export async function patchStation(patch: Partial<FeedingStation>): Promise<FeedingStation> {
   const next = normalizeStation({ ...(await loadStation()), ...patch });
   await localSet(KEY_STATION, next);
+  return next;
+}
+
+export async function loadBeds(): Promise<CatBedsState> {
+  return normalizeBeds(await localGet(KEY_BEDS));
+}
+
+export async function patchBeds(patch: Partial<CatBedsState>): Promise<CatBedsState> {
+  const cur = await loadBeds();
+  const next = normalizeBeds({ ...cur, ...patch, positions: { ...cur.positions, ...(patch.positions ?? {}) } });
+  await localSet(KEY_BEDS, next);
   return next;
 }
 

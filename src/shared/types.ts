@@ -212,6 +212,8 @@ export interface Settings {
   calmMode: boolean;
   /** Seconds without mouse / keyboard input before the cats curl up together (30..1800). */
   idleThreshold: number;
+  /** Cats now and then wander off to visit your other open tabs (and come back). */
+  tabRoaming: boolean;
 }
 
 export interface Drives {
@@ -247,9 +249,18 @@ export interface FeedingStation {
   foodLevel: number;
   /** 0..100 */
   waterLevel: number;
+  /** When the levels were last written (ms since epoch) — bowls keep emptying slowly while no page runs. */
+  updatedAt?: number;
 }
 
 export type BowlKind = 'food' | 'water';
+
+/** The cats' personal beds along the viewport floor (shared by all tabs). */
+export interface CatBedsState {
+  enabled: boolean;
+  /** Horizontal centre of each cat's bed along the floor, 0..1, keyed by profile id. */
+  positions: Record<string, number>;
+}
 
 /** The canonical, tab-independent state of one cat (kept by the service worker). */
 export interface CatRuntimeSnapshot {
@@ -271,9 +282,12 @@ export interface WorldSnapshot {
   href: string;
 }
 
-export type ToyKind = 'treat' | 'laser' | 'ball';
+export type ToyKind = 'treat' | 'laser' | 'ball' | 'mouse';
 
-export type PopupAction = 'treat' | 'laser' | 'ball' | 'call';
+/** Toys that go into your hand in play mode (the mouse runs about on its own). */
+export type ToolKind = 'treat' | 'laser' | 'ball';
+
+export type PopupAction = 'treat' | 'laser' | 'ball' | 'call' | 'mouse' | 'clear';
 
 export interface PageInfo {
   hostname: string;
@@ -281,5 +295,7 @@ export interface PageInfo {
   running: boolean;
   catCount: number;
   /** Toy currently in hand on that page (left-click play mode), if any. */
-  playTool?: ToyKind | null;
+  playTool?: ToolKind | null;
+  /** This tab currently hosts the cats (only one tab in the browser does). */
+  leader?: boolean;
 }

@@ -1033,8 +1033,13 @@ export function computePose(state: CatState, c: PoseContext): Pose {
       p.thickTop = 12.5;
       p.thickBot = 7.5;
       const top = Number.isFinite(c.partnerTopY) ? c.partnerTopY : -22;
-      p.headX = 38;
-      p.headY = clamp(top - 7, -40, -10);
+      // The forequarters slide up onto the partner (shoulders forward and raised a
+      // little) so the head rests on it on a normal-length neck — never a stretched one.
+      const headY = clamp(top - 7, -38, -10);
+      p.shX = 22;
+      p.shY = clamp(headY + 13, -24, -13);
+      p.headX = 36;
+      p.headY = headY;
       p.headRot = 0.32;
       p.eyeOpen = 0;
       p.earL = p.earR = -5;
@@ -1200,12 +1205,16 @@ export function computePose(state: CatState, c: PoseContext): Pose {
       const p = makePose(LOAF);
       p.thickTop = 13;
       p.thickBot = 7.5;
-      p.hipX = -24;
-      p.shX = 15;
       const top = Number.isFinite(c.partnerTopY) ? c.partnerTopY : -24;
       const reach = Number.isFinite(c.partnerDX) ? clamp(c.partnerDX * 0.55, 26, 46) : 36;
-      p.headX = reach + 2;
-      p.headY = clamp(top - 5, -42, -12);
+      // Reach toward the partner with the whole front half (shoulders forward and up onto
+      // its back), keeping the head a natural neck's length from the shoulders.
+      const headY = clamp(top - 5, -40, -12);
+      p.shX = clamp(reach - 13, 13, 30);
+      p.shY = clamp(headY + 12, -24, -13);
+      p.hipX = p.shX - 39;
+      p.headX = p.shX + 15;
+      p.headY = headY;
       p.headRot = 0.36;
       p.faceTurn = 0.22;
       p.eyeOpen = 0;

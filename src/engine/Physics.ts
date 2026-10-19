@@ -83,6 +83,42 @@ export function solveJump(x0: number, y0: number, x1: number, y1: number, cleara
   return { x0, y0, x1, y1, vx, vy, duration, apexY };
 }
 
+/** How high a cat's feet can get when it leaps straight up at something (px, at scale 1). */
+export const MAX_LEAP_UP = 190;
+/** How far it drifts sideways in such a leap (px, at scale 1). */
+export const MAX_LEAP_DX = 150;
+/** How far above its feet a cat's front paws reach at full stretch (px, at scale 1). */
+export const LEAP_REACH = 64;
+
+export interface LeapPlan {
+  /** The target is behind the cat: it has to turn around before it may leap. */
+  turn: boolean;
+  /** The jump (lands back on the same ledge), or null when there is nothing to leap at. */
+  plan: JumpPlan | null;
+}
+
+/**
+ * Plans a vertical pounce at something in the air (a dangling string, a laser on
+ * a wall, a ball in flight): a jump from (x, y) that lands back on the same ledge,
+ * peaking where the outstretched front paws meet the target at (tx, ty). The leap
+ * goes straight up or *forward* — never backward: a target behind the cat
+ * (relative to `facing`) returns `turn: true` so it turns around first.
+ */
+export function planLeap(x: number, y: number, facing: 1 | -1, tx: number, ty: number, scale = 1): LeapPlan {
+  const dx = tx - x;
+  const dir: 1 | -1 = Math.abs(dx) < 6 * scale ? facing : dx > 0 ? 1 : -1;
+  if (dir !== facing) return { turn: true, plan: null };
+  const reach = LEAP_REACH * scale;
+  const rise = y - ty;
+  if (rise > MAX_LEAP_UP * scale + reach || rise < -10) return { turn: false, plan: null };
+  const clearance = Math.max(12 * scale, rise - reach);
+  // The paws are ~20 px ahead of the feet: aim the apex there, landing as far again beyond it.
+  const apexX = tx - dir * 20 * scale;
+  const drift = clamp((apexX - x) * 2 * dir, 0, MAX_LEAP_DX * scale);
+  const plan = solveJump(x, y, x + dir * drift, y, clearance);
+  return { turn: false, plan };
+}
+
 export function trajectoryAt(plan: JumpPlan, t: number, g = GRAVITY): { x: number; y: number; vx: number; vy: number } {
   return {
     x: plan.x0 + plan.vx * t,
