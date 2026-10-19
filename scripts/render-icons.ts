@@ -30,9 +30,10 @@ function render(): void {
   pose.eyeOpen = 0.82;
   pose.faceTurn = 0.08;
   pose.headRot = 0;
-  const scale = 10.5;
-  // Frame the head: head centre (local) → tile centre.
-  const tr = { x: S / 2 - pose.headX * scale, y: S * 0.56 - pose.headY * scale, flip: 1, scale };
+  const scale = 13.5;
+  // Frame the head: the skeleton's actual skull centre → just below the tile centre.
+  const probe = r.skeleton(pose, { x: 0, y: 0, flip: 1, scale }, 0);
+  const tr = { x: S / 2 - probe.head.x * scale, y: S * 0.57 - probe.head.y * scale, flip: 1, scale };
   const tail = new VerletTail(6, 10.5 * scale, 0, 0, Math.PI);
   const skel = r.skeleton(pose, tr, 0);
   ctx.save();

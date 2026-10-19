@@ -1205,9 +1205,9 @@ export class ArticulatedCatRenderer {
     const chonk = this.profile.morphology.chonk;
     const jowl = 1 + 0.12 * clamp(chonk - 1, -0.3, 0.4) + 0.05 * (this.furF - 1);
     const base: [number, number][] = [
-      [0, -0.8],
-      [0.42, -0.76],
-      [0.78, -0.44],
+      [0, -0.86],
+      [0.46, -0.79],
+      [0.8, -0.46],
       [0.98, -0.04],
       [0.9 * jowl, 0.3],
       [0.55 * jowl, 0.56],
@@ -1216,8 +1216,8 @@ export class ArticulatedCatRenderer {
       [-0.55 * jowl, 0.56],
       [-0.9 * jowl, 0.3],
       [-0.98, -0.04],
-      [-0.78, -0.44],
-      [-0.42, -0.76],
+      [-0.8, -0.46],
+      [-0.46, -0.79],
     ];
     return base.map(([x, y]) => {
       let X = x;
@@ -1326,15 +1326,15 @@ export class ArticulatedCatRenderer {
     outer.closePath();
     const cap = this.tex.earOuter;
     const og = ctx.createLinearGradient(0, es * 0.1, 0, -es);
-    og.addColorStop(0, shadeHex(cap, side < 0 ? -0.08 : 0));
-    og.addColorStop(1, shadeHex(cap, side < 0 ? -0.2 : -0.12));
+    og.addColorStop(0, shadeHex(cap, side < 0 ? -0.06 : 0.02));
+    og.addColorStop(1, shadeHex(cap, side < 0 ? -0.14 : -0.06));
     ctx.fillStyle = og;
     ctx.fill(outer);
     // Inner pinna: thin pink skin, darkest deep in the cup, translucent at the rim.
     const inner = new Path2D();
-    inner.moveTo(-bw * 0.36, es * 0.06);
-    inner.bezierCurveTo(-bw * 0.36, -es * 0.4, -bw * 0.14, -es * 0.76, -bw * 0.01, -es * 0.86);
-    inner.bezierCurveTo(bw * 0.16, -es * 0.72, bw * 0.38, -es * 0.38, bw * 0.36, es * 0.06);
+    inner.moveTo(-bw * 0.42, es * 0.08);
+    inner.bezierCurveTo(-bw * 0.44, -es * 0.42, -bw * 0.16, -es * 0.8, -bw * 0.01, -es * 0.9);
+    inner.bezierCurveTo(bw * 0.18, -es * 0.76, bw * 0.45, -es * 0.4, bw * 0.43, es * 0.08);
     inner.closePath();
     const ig = ctx.createRadialGradient(bw * 0.02, -es * 0.25, es * 0.04, 0, -es * 0.4, es * 0.62);
     ig.addColorStop(0, shadeHex(pal.innerEar, -0.32));
