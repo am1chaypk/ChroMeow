@@ -29,7 +29,16 @@ export interface Toy {
   retarget: number;
   spin: number;
   idle: number;
+  /** Laser steered by the user's mouse (no autonomous wandering). */
+  controlled?: boolean;
+  /** Ball currently held under the cursor (not yet thrown). */
+  held?: boolean;
 }
+
+/** Max simultaneous treats; clicking more replaces the oldest. */
+const MAX_TREATS = 12;
+/** Fastest a hand can throw the ball (px/s). */
+const MAX_THROW = 1700;
 
 const BALL_R = 8;
 
@@ -72,6 +81,73 @@ export class ToyManager {
     return t;
   }
 
+  /** Drops a treat exactly where the user clicked; it falls onto the ledge beneath. */
+  spawnTreatAt(x: number, y: number): Toy {
+    const treats = this.toys.filter((t) => t.kind === 'treat');
+    if (treats.length >= MAX_TREATS) this.remove(treats[0]);
+    const t = this.make('treat', x, y);
+    t.vy = -40;
+    return t;
+  }
+
+  /** The user's laser: on while the button is held, exactly under the cursor. */
+  controlLaser(x: number, y: number, on: boolean): Toy | null {
+    let t = this.toys.find((k) => k.kind === 'laser' && k.controlled) ?? null;
+    if (!on) {
+      if (t) {
+        // Released: the dot freezes and fades out quickly.
+        t.controlled = false;
+        t.tx = t.x;
+        t.ty = t.y;
+        t.retarget = 99;
+        t.life = Math.min(t.life, t.age + 0.25);
+      }
+      return null;
+    }
+    if (!t) {
+      this.toys = this.toys.filter((k) => k.kind !== 'laser');
+      t = this.make('laser', x, y);
+      t.controlled = true;
+    }
+    t.tx = x;
+    t.ty = y;
+    t.age = 0;
+    t.life = 16;
+    return t;
+  }
+
+  /** Picks up (or moves) the ball under the cursor. */
+  holdBall(x: number, y: number): Toy {
+    let t = this.toys.find((k) => k.kind === 'ball' && k.held) ?? null;
+    if (!t) {
+      this.toys = this.toys.filter((k) => k.kind !== 'ball');
+      t = this.make('ball', x, y);
+      t.held = true;
+    }
+    t.spin += (x - t.x) / BALL_R;
+    t.x = x;
+    t.y = y;
+    t.vx = 0;
+    t.vy = 0;
+    t.ground = null;
+    t.age = 0;
+    return t;
+  }
+
+  /** Lets go of the held ball with the hand's velocity. */
+  throwBall(vx: number, vy: number): Toy | null {
+    const t = this.toys.find((k) => k.kind === 'ball' && k.held) ?? null;
+    if (!t) return null;
+    const sp = Math.hypot(vx, vy);
+    const k = sp > MAX_THROW ? MAX_THROW / sp : 1;
+    t.held = false;
+    t.vx = vx * k;
+    t.vy = vy * k;
+    t.idle = 0;
+    t.age = 0;
+    return t;
+  }
+
   remove(toy: Toy): void {
     this.toys = this.toys.filter((t) => t !== toy);
   }
@@ -82,6 +158,7 @@ export class ToyManager {
     for (const t of this.toys) {
       if (!kinds.includes(t.kind)) continue;
       if (t.kind === 'treat' && t.eaten >= 1) continue;
+      if (t.held) continue;
       const d = Math.hypot(t.x - x, t.y - y);
       if (d < bd) {
         bd = d;
@@ -98,7 +175,7 @@ export class ToyManager {
       toy.vy = -lerp(160, 360, Math.random()) * power;
       toy.ground = null;
       toy.idle = 0;
-    } else if (toy.kind === 'laser') {
+    } else if (toy.kind === 'laser' && !toy.controlled) {
       toy.retarget = 0;
       toy.tx = clamp(toy.x + dirX * lerp(160, 360, Math.random()), 10, 4000);
     }
@@ -120,7 +197,7 @@ export class ToyManager {
       t.age += dt;
       if (t.age > t.life) continue;
       if (t.kind === 'laser') this.updateLaser(t, dt, platforms, bounds);
-      else this.updateBody(t, dt, platforms, bounds);
+      else if (!t.held) this.updateBody(t, dt, platforms, bounds);
       keep.push(t);
     }
     this.toys = keep;
@@ -181,6 +258,17 @@ export class ToyManager {
   }
 
   private updateLaser(t: Toy, dt: number, platforms: readonly Platform[], bounds: WorldBounds): void {
+    if (t.controlled) {
+      // A hand-held laser: a tiny tremor, otherwise exactly where the user points.
+      t.age = 0;
+      const k = 1 - Math.exp(-40 * dt);
+      t.x += (t.tx - t.x) * k + (this.rng.next() - 0.5) * 0.8;
+      t.y += (t.ty - t.y) * k + (this.rng.next() - 0.5) * 0.8;
+      t.x = clamp(t.x, 2, bounds.width - 2);
+      t.y = clamp(t.y, 2, bounds.height - 2);
+      t.ground = platforms.find((p) => Math.abs(p.y - 2 - t.y) < 6 && t.x >= p.xMin && t.x <= p.xMax)?.id ?? null;
+      return;
+    }
     t.retarget -= dt;
     if (t.retarget <= 0) {
       t.retarget = this.rng.range(0.5, 1.4);

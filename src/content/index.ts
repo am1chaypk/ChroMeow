@@ -13,7 +13,10 @@ import type { CatProfile, PageInfo, Settings } from '../shared/types';
 import { DomPlatformScanner } from '../engine/DomPlatformScanner';
 import { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import { World } from '../sim/World';
+import { renderQuality } from '../engine/ArticulatedCatRenderer';
+import { useLanguage } from '../shared/i18n';
 import { InputInterceptor } from './InputInterceptor';
+import { PlayMode } from './PlayMode';
 import { ShadowDOMOverlay } from './ShadowDOMOverlay';
 
 declare global {
@@ -31,11 +34,16 @@ class ContentApp {
   private scanner: DomPlatformScanner | null = null;
   private world: World | null = null;
   private input: InputInterceptor | null = null;
+  private play: PlayMode | null = null;
   private sound = new SoundSynthesizer();
   private raf = 0;
   private last = 0;
   private frame = 0;
   private lastSnapshot = 0;
+  /** Smoothed frame interval (s) and how long it has been slow / fast, for adaptive quality. */
+  private frameEma = 1 / 60;
+  private slowFor = 0;
+  private fastFor = 0;
   private running = false;
   private alive = true;
 
@@ -56,6 +64,8 @@ class ContentApp {
     overlay.mount();
     overlay.setClickThrough(this.settings.clickThroughLock);
     this.overlay = overlay;
+    useLanguage(this.settings.language);
+    this.play = new PlayMode(overlay.root, () => this.world);
     const scanner = new DomPlatformScanner(overlay.host);
     scanner.start();
     this.scanner = scanner;
@@ -68,8 +78,13 @@ class ContentApp {
 
     this.input = new InputInterceptor({
       move: (x, y, t) => world.pointerMove(x, y, t),
-      down: (x, y) => world.pointerDown(x, y),
-      up: (x, y) => world.pointerUp(x, y),
+      // While a toy is in hand, left clicks belong to the toy, not to petting.
+      down: (x, y) => {
+        if (!this.play?.active) world.pointerDown(x, y);
+      },
+      up: (x, y) => {
+        if (!this.play?.active) world.pointerUp(x, y);
+      },
       leave: () => world.pointerLeave(),
       typing: (el, caret) => {
         const id = scanner.track(el);
@@ -94,6 +109,8 @@ class ContentApp {
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('pagehide', this.onHide);
     this.input?.stop();
+    this.play?.destroy();
+    this.play = null;
     this.scanner?.stop();
     this.world?.dispose();
     this.overlay?.unmount();
@@ -144,14 +161,17 @@ class ContentApp {
     if (!this.running || !this.world || !this.overlay || !this.scanner) return;
     this.raf = requestAnimationFrame(this.loop);
     if (document.visibilityState === 'hidden') return;
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const raw = (now - this.last) / 1000;
+    const dt = Math.min(0.05, raw);
     this.last = now;
     this.frame++;
+    this.adaptQuality(Math.min(0.1, raw));
     this.scanner.update(now);
     this.world.update(dt);
-    // Sleepy throttle: when everyone is napping, draw at ~20 fps.
+    // Sleepy throttle: when everyone is napping (or calm mode is on), draw at ~30 fps.
+    // Breathing is slow enough that this stays perfectly smooth while halving the work.
     const drowsy = this.world.isDrowsy() || this.settings.calmMode;
-    if (drowsy && this.frame % (this.settings.calmMode && !this.world.isDrowsy() ? 2 : 3) !== 0) return;
+    if (drowsy && this.frame % 2 !== 0) return;
     this.overlay.ensureMounted();
     const ctx = this.overlay.beginFrame();
     const rects = this.world.render(ctx);
@@ -159,6 +179,30 @@ class ContentApp {
     this.overlay.syncHitboxes(this.world.agents.map((a) => ({ id: a.id, lm: a.lm, state: a.state, ground: a.groundId })));
     if (now - this.lastSnapshot > SNAPSHOT_INTERVAL) this.pushSnapshot();
   };
+
+  /**
+   * Keeps animation smooth on slower machines: if frames run long for a few
+   * seconds, lighten the fur and lighting work; restore full quality once
+   * there is headroom again.
+   */
+  private adaptQuality(raw: number): void {
+    if (this.world?.isDrowsy() || this.settings.calmMode) return;
+    this.frameEma += (raw - this.frameEma) * 0.05;
+    if (this.frameEma > 0.024) {
+      this.slowFor += raw;
+      this.fastFor = 0;
+    } else if (this.frameEma < 0.0185) {
+      this.fastFor += raw;
+      this.slowFor = 0;
+    }
+    if (renderQuality.level >= 1 && this.slowFor > 3) {
+      renderQuality.level = 0;
+      this.slowFor = 0;
+    } else if (renderQuality.level < 1 && this.fastFor > 10) {
+      renderQuality.level = 1;
+      this.fastFor = 0;
+    }
+  }
 
   /* ------------------------------------------------------------- settings */
 
@@ -175,6 +219,8 @@ class ContentApp {
     this.world?.setSettings(next);
     if (this.world) this.world.interactive = !next.clickThroughLock;
     this.overlay?.setClickThrough(next.clickThroughLock);
+    useLanguage(next.language);
+    this.play?.render();
   }
 
   applyProfiles(next: CatProfile[]): void {
@@ -193,6 +239,7 @@ class ContentApp {
       blacklisted: isBlacklisted(this.settings, location.hostname),
       running: this.running,
       catCount: this.world?.agents.length ?? 0,
+      playTool: this.play?.current ?? null,
     };
   }
 
@@ -209,6 +256,12 @@ class ContentApp {
         else if (msg.action === 'ball') w.tossBall();
         else if (msg.action === 'call') w.callCats();
         return { ok: true };
+      }
+      case 'cm:play': {
+        if (!this.world || !this.play) return { ok: false };
+        this.sound.unlock();
+        this.play.set(msg.tool);
+        return { ok: true, tool: this.play.current };
       }
       case 'cm:applyWorld':
         this.world?.applySnapshot(msg.world);

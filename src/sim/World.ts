@@ -317,6 +317,50 @@ export class World {
     for (const a of this.agents) if (!a.isAsleep()) a.command('toy', env);
   }
 
+  /* ------------------------------------------ hand-held toys (left click) */
+
+  private lastTreatMeow = -10;
+
+  /** Drops a treat where the user clicked; nearby cats come to eat. */
+  placeTreat(x: number, y: number): void {
+    const env = this.env();
+    this.toys.spawnTreatAt(x, y);
+    for (const a of this.agents) {
+      if (a.isAsleep() && a.drives.energy < 25) continue;
+      const s = this.social.sessionOf(a);
+      if (s) this.social.end(s);
+      a.command('treat', env);
+    }
+    if (this.now - this.lastTreatMeow > 2.5) {
+      this.lastTreatMeow = this.now;
+      this.sound?.meow(1.1, 0.45);
+    }
+  }
+
+  private laserOn = false;
+
+  /** The user's laser pointer: shines while the left button is held. */
+  laserAt(x: number, y: number, on: boolean): void {
+    this.toys.controlLaser(x, y, on);
+    if (on && !this.laserOn) {
+      const env = this.env();
+      for (const a of this.agents) if (!a.isAsleep() || a.drives.energy > 45) a.command('toy', env);
+    }
+    this.laserOn = on;
+  }
+
+  /** Picks up / carries the ball under the cursor. */
+  holdBall(x: number, y: number): void {
+    this.toys.holdBall(x, y);
+  }
+
+  /** Throws the held ball with the hand's velocity; awake cats give chase. */
+  throwBall(vx: number, vy: number): void {
+    if (!this.toys.throwBall(vx, vy)) return;
+    const env = this.env();
+    for (const a of this.agents) if (!a.isAsleep()) a.command('toy', env);
+  }
+
   callCats(): void {
     const env = this.env();
     const floor = this.source.floor();

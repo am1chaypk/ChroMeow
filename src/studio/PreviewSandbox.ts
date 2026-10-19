@@ -9,6 +9,7 @@ import type { CatProfile, Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/storage';
 import { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import { StaticPlatformSource, type StaticLedge } from '../sim/StaticPlatformSource';
+import { ToyTool } from '../sim/ToyTool';
 import { World } from '../sim/World';
 
 interface Box {
@@ -33,6 +34,8 @@ export class PreviewSandbox {
   private dpr = 1;
   private ro: ResizeObserver;
   selectedId: string | null = null;
+  /** Left-click toy in hand (treat / laser / ball), or null for petting. */
+  readonly tool: ToyTool;
 
   constructor(private readonly canvas: HTMLCanvasElement, settings: Settings = DEFAULT_SETTINGS) {
     this.ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
@@ -41,19 +44,33 @@ export class PreviewSandbox {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(canvas);
     this.resize();
+    this.tool = new ToyTool(() => this.world);
     canvas.addEventListener('pointermove', (e) => {
       const p = this.local(e);
       this.world.pointerMove(p.x, p.y, performance.now() / 1000);
+      if (this.tool.holding) this.tool.move(p.x, p.y, e.timeStamp / 1000);
     });
     canvas.addEventListener('pointerdown', (e) => {
       const p = this.local(e);
       this.sound.unlock();
+      if (this.tool.active) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        canvas.setPointerCapture(e.pointerId);
+        this.tool.down(p.x, p.y, e.timeStamp / 1000);
+        return;
+      }
       if (this.world.pointerDown(p.x, p.y)) canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointerup', (e) => {
       const p = this.local(e);
+      if (this.tool.active) {
+        this.tool.up(p.x, p.y, e.timeStamp / 1000);
+        return;
+      }
       this.world.pointerUp(p.x, p.y);
     });
+    canvas.addEventListener('lostpointercapture', () => this.tool.cancel());
     canvas.addEventListener('pointerleave', () => this.world.pointerLeave());
   }
 
