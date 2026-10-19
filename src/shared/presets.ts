@@ -4,25 +4,28 @@
  * The two built-in cats are Alex and Anna, the bonded brown-and-white mackerel
  * tabbies from the reference photographs:
  *
- *  • Alex (אלכס) — a patched brown-grey mackerel tabby with white, a little
- *    stockier than Anna. A warm rufous / amber patch sits low on his flank where
- *    the tabby coat meets the white belly, and a white band crosses his back just
- *    behind the shoulders ("broken saddle"), splitting the tabby shoulder patch
- *    from the rear saddle. Wide, slightly lopsided white blaze over the muzzle and
- *    cheeks, bubblegum-pink nose, white chest, belly and legs, ringed tail with a
- *    black tip. Relaxed and affectionate: sprawls, stretches his front paws out,
- *    eats a bit more, adores head, chin and back strokes, and is devoted to Anna.
- *  • Anna (אנה) — a classic cool brown / charcoal mackerel tabby with white: crisp
- *    near-black stripes over a cool taupe-grey ticked coat and one continuous
- *    tabby mantle from crown to tail base (no white band, no orange patch).
- *    Narrow symmetrical blaze, delicate pink nose, sharp eyeliner, a clear "M",
- *    white bib, belly and socks. An alert, agile cursor hunter with expressive
- *    "airplane ears" who is forever starting grooming sessions and cuddles.
+ *  • Alex (אלכס) — a big, chonky patched brown tabby with white. A white band
+ *    crosses his back just behind the shoulders ("broken saddle"), splitting the
+ *    tabby shoulder patch from the rear saddle, and an amber patch sits low on his
+ *    flank where the tabby meets the white belly. Narrow blaze that climbs high up
+ *    the forehead, tabby front legs with white paws, high white hind stockings, a
+ *    few dark tail rings. Relaxed and affectionate: sprawls, stretches his front
+ *    paws out, eats a bit more, adores head, chin and back strokes, devoted to Anna.
+ *  • Anna (אנה) — a mantled brown tabby with white: one continuous tabby mantle
+ *    from crown to tail with a small white crest near the rump (no white band, no
+ *    orange patch), a broad soft blaze, bold cheek stripes, white mittens and a
+ *    well-ringed tail. An alert cursor hunter with expressive "airplane ears" who is
+ *    forever starting grooming sessions and cuddles.
+ *
+ *  Coats, bodies and personalities are the owner's own tuned versions of the cats.
  */
 import type { CatProfile, CatTraits, CoatMarkings, CoatPalette, CoatPattern, Morphology, Personality, SignatureBehaviors } from './types';
 
-/** 2 = v2.0 (Alex & Anna, traits). Stored profiles from v1 are migrated on load. */
-export const PROFILE_VERSION = 2;
+/**
+ * 2 = v2.0 (Alex & Anna, traits); 3 = Alex & Anna's coats and bodies set from the
+ * owner's own tuned cats. Stored profiles from older versions are migrated on load.
+ */
+export const PROFILE_VERSION = 3;
 export const MAX_CATS = 6;
 
 export const ALEX_ID = 'alex';
@@ -45,39 +48,11 @@ export const PIEBALD_TABBY_PALETTE: CoatPalette = {
   eyeRim: '#1E1A16',
 };
 
-/** Alex: warmer golden-brown agouti, amber flank patch #D47A34 deepening into #B86528. */
-export const ALEX_PALETTE: CoatPalette = {
-  baseWhite: '#F8F7F4',
-  undercoatWarm: '#F0ECE4',
-  tabbyBase: '#7E6A53',
-  tabbyStripe: '#28211B',
-  rufus: '#B86528',
-  flankPatch: '#D47A34',
-  patchSecondary: '#C9873F',
-  noseLeather: '#E88B9C',
-  pawPads: '#E595A0',
-  innerEar: '#E29BA3',
-  eyeLeft: '#9DAA5E',
-  eyeRight: '#8E9F55',
-  eyeRim: '#1E1A16',
-};
+/** Alex's coat as tuned in the Cat Studio by his owner (rufous kept dark so only the flank patch is warm). */
+export const ALEX_PALETTE: CoatPalette = { baseWhite: '#F7F6F2', undercoatWarm: '#EFECE6', tabbyBase: '#7A6855', tabbyStripe: '#2A241E', rufus: '#3F3B36', flankPatch: '#C47D38', patchSecondary: '#292624', noseLeather: '#E58B88', pawPads: '#E29592', innerEar: '#DF9B98', eyeLeft: '#8FA868', eyeRight: '#7E9A5C', eyeRim: '#1E1A16' };
 
-/** Anna: sharp #1E1D1B mackerel stripes over a cool #6A5D4D taupe-grey agouti. */
-export const ANNA_PALETTE: CoatPalette = {
-  baseWhite: '#F7F6F2',
-  undercoatWarm: '#EDEAE5',
-  tabbyBase: '#6A5D4D',
-  tabbyStripe: '#1E1D1B',
-  rufus: '#9C7A55',
-  flankPatch: '#9C7A55',
-  patchSecondary: '#B0865A',
-  noseLeather: '#E7A1A4',
-  pawPads: '#E39DA0',
-  innerEar: '#DFA2A3',
-  eyeLeft: '#9AAE62',
-  eyeRight: '#8AA157',
-  eyeRim: '#191715',
-};
+/** Anna's coat as tuned in the Cat Studio by her owner. */
+export const ANNA_PALETTE: CoatPalette = { baseWhite: '#F7F6F2', undercoatWarm: '#EFECE6', tabbyBase: '#7A6855', tabbyStripe: '#2A241E', rufus: '#B87A3D', flankPatch: '#C47D38', patchSecondary: '#C9873F', noseLeather: '#E58B88', pawPads: '#E29592', innerEar: '#DF9B98', eyeLeft: '#86A160', eyeRight: '#6E8C52', eyeRim: '#1E1A16' };
 
 const NO_SIGNATURE: SignatureBehaviors = {
   chinPropSleep: false,
@@ -142,31 +117,13 @@ export function createAlex(): CatProfile {
     slot: 1,
     enabled: true,
     name: 'Alex',
-    bio: 'Alex (אלכס) — patched brown-grey mackerel tabby with white: amber flank patch, white band across the back behind the shoulders, wide white blaze. Relaxed, affectionate, sprawls and stretches, loves chin and back scratches, and is devoted to Anna.',
+    bio: 'Alex (אלכס) — big patched brown tabby with white: white band across the back behind the shoulders, amber flank patch, narrow high blaze. Relaxed, affectionate, sprawls and stretches, loves chin and back scratches, and is devoted to Anna.',
     pattern: 'PATCHED_TABBY_HARLEQUIN',
     palette: { ...ALEX_PALETTE },
-    markings: {
-      whiteAmount: 0.66,
-      blazeWidth: 0.78,
-      blazeSoftness: 0.32,
-      blazeAsymmetry: 0.55,
-      blazeHeight: 0.62,
-      shoulderBand: true,
-      flankPatch: true,
-      rumpCrest: false,
-      eyeliner: 0.8,
-      mMark: true,
-      cheekStripes: 0.5,
-      eyeHalo: 0.65,
-      frontLegWhite: 1.0,
-      hindLegWhite: 0.92,
-      tailRings: 6,
-      tailTipDark: true,
-      stripeDensity: 0.72,
-    },
-    morphology: { chonk: 1.26, furLength: 'short', earSize: 1.0, tailLength: 1.0, heterochromia: false, size: 1.06 },
-    personality: { laziness: 0.8, huntDrive: 0.45, sociability: 0.95, sassiness: 0.3, clumsiness: 0.3, affection: 0.95 },
-    signature: { chinPropSleep: true, meltedLoafSleep: false, airplaneSquint: false, pillowSnuggler: false, widePawSplay: true },
+    markings: { whiteAmount: 0.5, blazeWidth: 0.34, blazeSoftness: 0.18, blazeAsymmetry: 0.55, blazeHeight: 0.92, shoulderBand: true, flankPatch: true, rumpCrest: false, eyeliner: 0.85, mMark: true, cheekStripes: 0.2, eyeHalo: 0.7, frontLegWhite: 0.26, hindLegWhite: 0.85, tailRings: 3, tailTipDark: true, stripeDensity: 0.7 },
+    morphology: { chonk: 1.3, furLength: 'short', earSize: 1, tailLength: 1, heterochromia: false, size: 1.2 },
+    personality: { laziness: 0.85, huntDrive: 0.6, sociability: 0.8, sassiness: 0.7, clumsiness: 0.4, affection: 1 },
+    signature: { chinPropSleep: true, meltedLoafSleep: false, airplaneSquint: true, pillowSnuggler: false, widePawSplay: true },
     traits: {
       hungerRateMultiplier: 1.15,
       thirstRateMultiplier: 1.0,
@@ -192,31 +149,13 @@ export function createAnna(): CatProfile {
     slot: 2,
     enabled: true,
     name: 'Anna',
-    bio: 'Anna (אנה) — classic cool brown / charcoal mackerel tabby with white: one continuous tabby mantle from crown to tail, narrow blaze, crisp eyeliner and "M". An alert cursor hunter with expressive airplane ears who loves grooming and cuddling Alex.',
+    bio: 'Anna (אנה) — mantled brown tabby with white: one continuous tabby mantle with a small white crest near the rump, broad soft blaze, bold cheek stripes. An alert cursor hunter with expressive airplane ears who loves grooming and cuddling Alex.',
     pattern: 'MANTLED_BICOLOR_TABBY',
     palette: { ...ANNA_PALETTE },
-    markings: {
-      whiteAmount: 0.4,
-      blazeWidth: 0.3,
-      blazeSoftness: 0.22,
-      blazeAsymmetry: 0,
-      blazeHeight: 0.78,
-      shoulderBand: false,
-      flankPatch: false,
-      rumpCrest: false,
-      eyeliner: 0.95,
-      mMark: true,
-      cheekStripes: 0.9,
-      eyeHalo: 0.35,
-      frontLegWhite: 0.55,
-      hindLegWhite: 0.6,
-      tailRings: 6,
-      tailTipDark: true,
-      stripeDensity: 0.85,
-    },
-    morphology: { chonk: 1.08, furLength: 'short', earSize: 1.03, tailLength: 1.02, heterochromia: false, size: 0.98 },
-    personality: { laziness: 0.5, huntDrive: 0.9, sociability: 0.95, sassiness: 0.5, clumsiness: 0.15, affection: 0.88 },
-    signature: { chinPropSleep: false, meltedLoafSleep: true, airplaneSquint: true, pillowSnuggler: true, widePawSplay: false },
+    markings: { whiteAmount: 0.4, blazeWidth: 0.62, blazeSoftness: 0.62, blazeAsymmetry: 0, blazeHeight: 0.55, shoulderBand: false, flankPatch: false, rumpCrest: true, eyeliner: 0.92, mMark: true, cheekStripes: 0.9, eyeHalo: 0.5, frontLegWhite: 0.85, hindLegWhite: 0.78, tailRings: 7, tailTipDark: true, stripeDensity: 0.8 },
+    morphology: { chonk: 1.25, furLength: 'short', earSize: 1, tailLength: 1, heterochromia: false, size: 1.1 },
+    personality: { laziness: 0.7, huntDrive: 0.85, sociability: 0.9, sassiness: 0.7, clumsiness: 0.3, affection: 0.85 },
+    signature: { chinPropSleep: true, meltedLoafSleep: true, airplaneSquint: true, pillowSnuggler: false, widePawSplay: true },
     traits: {
       hungerRateMultiplier: 0.95,
       thirstRateMultiplier: 1.05,
@@ -401,7 +340,8 @@ function sameValues(a: object | undefined, b: object): boolean {
  * sprite sheets and the on/off switch. Untouched factory parts get the v2 look.
  */
 export function migrateProfile(p: Partial<CatProfile>, takenIds: ReadonlySet<string>): Partial<CatProfile> {
-  if ((p.version ?? 1) >= 2) return p;
+  if ((p.version ?? 1) === 2) return migrateV2(p);
+  if ((p.version ?? 1) >= 3) return p;
   const key = p.presetKey;
   if (key !== 'cat1-harlequin' && key !== 'cat2-mantled') return p;
   const alex = key === 'cat1-harlequin';
@@ -420,4 +360,17 @@ export function migrateProfile(p: Partial<CatProfile>, takenIds: ReadonlySet<str
     out.bio = fresh.bio;
   }
   return out;
+}
+
+/** The v2.0 factory palettes of Alex and Anna (replaced in v3). */
+const V2_ALEX_PALETTE: CoatPalette = { baseWhite: '#F8F7F4', undercoatWarm: '#F0ECE4', tabbyBase: '#7E6A53', tabbyStripe: '#28211B', rufus: '#B86528', flankPatch: '#D47A34', patchSecondary: '#C9873F', noseLeather: '#E88B9C', pawPads: '#E595A0', innerEar: '#E29BA3', eyeLeft: '#9DAA5E', eyeRight: '#8E9F55', eyeRim: '#1E1A16' };
+const V2_ANNA_PALETTE: CoatPalette = { baseWhite: '#F7F6F2', undercoatWarm: '#EDEAE5', tabbyBase: '#6A5D4D', tabbyStripe: '#1E1D1B', rufus: '#9C7A55', flankPatch: '#9C7A55', patchSecondary: '#B0865A', noseLeather: '#E7A1A4', pawPads: '#E39DA0', innerEar: '#DFA2A3', eyeLeft: '#9AAE62', eyeRight: '#8AA157', eyeRim: '#191715' };
+
+/** v2 → v3: an Alex or Anna still wearing the v2.0 factory coat gets the new default look; edited cats are left alone. */
+function migrateV2(p: Partial<CatProfile>): Partial<CatProfile> {
+  const alex = p.presetKey === ALEX_ID;
+  if (!alex && p.presetKey !== ANNA_ID) return p;
+  if (!sameValues(p.palette, alex ? V2_ALEX_PALETTE : V2_ANNA_PALETTE)) return p;
+  const fresh = alex ? createAlex() : createAnna();
+  return { ...p, palette: { ...fresh.palette }, markings: { ...fresh.markings }, morphology: { ...fresh.morphology }, personality: { ...fresh.personality }, signature: { ...fresh.signature } };
 }

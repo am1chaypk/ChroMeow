@@ -31,7 +31,6 @@ import { VerletTail, type TailParams } from '../engine/VerletTail';
 import { clampThrow, findLanding, isScrollViolent, pendulumStep, platformBelow, platformWidth, solveJump, trajectoryAt, applyFriction, fallStep, type JumpPlan, type PendulumState, type Platform, type PlatformSource, type WorldBounds } from '../engine/Physics';
 import { planRoute, type NavJump, type NavPlan } from '../engine/Navigator';
 import type { ParticleSystem } from '../engine/Particles';
-import type { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import type { AnyCtx } from '../engine/canvas';
 import type { Toy, ToyManager } from '../content/ToyManager';
 import type { StationModel } from './FeedingStation';
@@ -87,7 +86,6 @@ export interface AgentEnv {
   typing: TypingInfo | null;
   toys: ToyManager;
   particles: ParticleSystem;
-  sound: SoundSynthesizer | null;
   others: CatAgent[];
   catScale: number;
   calm: boolean;
@@ -661,7 +659,6 @@ export class CatAgent {
               target: () => (env.cursor.present ? { x: env.cursor.x, y: env.cursor.y } : null),
               onPin: () => {
                 if (this.lm) env.particles.emit('spark', this.lm.paws[0].x, this.lm.paws[0].y - 4, 6, S);
-                env.sound?.chirp();
               },
             },
             { kind: 'state', state: 'IDLE_SIT', dur: r.range(2, 4) },
@@ -730,7 +727,6 @@ export class CatAgent {
           if (!toy.ground) return null;
           return { platformId: toy.ground, x: toy.x - Math.sign(toy.x - this.x || 1) * 30 * S };
         };
-        env.sound?.meow(1.05 + this.seed * 0.2, 0.5);
         this.setPlan(
           [
             { kind: 'goto', spot: spotFn, gait: 'TROT', tol: 10 * S, maxTime: 10 },
@@ -1006,7 +1002,6 @@ export class CatAgent {
           if (this.fsm.current === 'CROUCH_PREP_JUMP') this.fsm.request('POUNCE_AND_PIN');
           if (this.fsm.current === 'POUNCE_AND_PIN') {
             this.taskFlag = 3;
-            env.sound?.chirp();
           } else if (this.fsm.current !== 'CROUCH_PREP_JUMP' && this.taskTime > 3) this.completeTask();
           else if (this.fsm.current !== 'CROUCH_PREP_JUMP') this.fsm.request('CROUCH_PREP_JUMP');
           return;
@@ -1073,10 +1068,6 @@ export class CatAgent {
           const mx = this.lm.head.x + this.facing * this.lm.head.r * 0.6;
           env.particles.emit(bowl === 'food' ? 'crumb' : 'drop', mx, this.lm.head.y + this.lm.head.r * 0.7, 1, S);
         }
-        if (this.rng.chance(dt * (bowl === 'food' ? 2.6 : 3.4))) {
-          if (bowl === 'food') env.sound?.crunch();
-          else env.sound?.lap();
-        }
         const done = this.drives[key] < MEAL.full || st.level(bowl) <= 0 || this.fsm.time > MEAL.maxTime;
         if (done) {
           st.release(bowl, this.id);
@@ -1113,7 +1104,6 @@ export class CatAgent {
         this.begMeowIn -= dt;
         if (this.begMeowIn <= 0) {
           this.begMeowIn = this.rng.range(5.5, 8);
-          env.sound?.meow(1.12 + this.seed * 0.15, 0.48);
           if (this.lm) env.particles.emit(task.bowl === 'food' ? 'thoughtFood' : 'thoughtWater', this.lm.head.x + this.facing * 10 * this.S, this.lm.head.y - 26 * this.S, 1, this.S);
         }
         if (this.fsm.current !== 'EMPTY_BOWL_WAIT' || this.taskTime >= task.dur) {
@@ -1151,7 +1141,6 @@ export class CatAgent {
     if (startled) {
       if (!this.fsm.force('STARTLED_AIRBORNE')) this.fsm.restore('IDLE_STAND');
       if (this.lm) env.particles.emit('bang', this.lm.head.x + 10 * this.S, this.lm.head.y - 18 * this.S, 1, this.S);
-      env.sound?.mrrp(1.4);
     } else if (!this.fsm.force('FALL_DESCEND')) this.fsm.force('STARTLED_AIRBORNE');
     this.plan = [];
     this.planLocked = false;
@@ -1402,8 +1391,6 @@ export class CatAgent {
     this.vx = 0;
     this.vy = 0;
     this.bliss = 0;
-    sound(env)?.unlock();
-    env.sound?.mrrp(1.15 + this.seed * 0.2);
     this.setPurr(env, true, 0.45);
   }
 
@@ -1501,7 +1488,6 @@ export class CatAgent {
     if (zone !== this.petZone) this.petZoneTime = 0;
     this.petZone = zone;
     this.petZoneTime += dt;
-    sound(env)?.unlock();
     const p = this.profile.personality;
     const eff = ZONE_EFFECTS[zone];
     const loved = zone === 'CHIN_CHEEKS' || zone === 'CROWN_EARS' || zone === 'BACK_BASE_OF_TAIL' || zone === 'SCRUFF';
@@ -1587,7 +1573,6 @@ export class CatAgent {
 
   /** A single click / boop. */
   poke(zone: PetZone | null, env: AgentEnv): void {
-    sound(env)?.unlock();
     if (this.isAirborne() || this.climb || this.held) return;
     if (this.isAsleep()) {
       if (this.profile.signature.airplaneSquint || this.profile.personality.sassiness > 0.55) this.trySquint(env);
@@ -1603,7 +1588,6 @@ export class CatAgent {
       if (this.drives.irritation > 30) this.indignant(env);
       return;
     }
-    env.sound?.mrrp(1 + this.seed * 0.3);
     if (this.lm) env.particles.emit('heart', this.lm.head.x, this.lm.head.y - 12 * this.S, 1, this.S);
   }
 
@@ -1623,7 +1607,6 @@ export class CatAgent {
       'indignant',
       true,
     );
-    env.sound?.mrrp(0.8);
   }
 
   /** JUDGMENTAL_AIRPLANE_SQUINT: raise head, ears flat at −38°, 40% squint, stare at cursor, back to sleep. */
@@ -1638,7 +1621,6 @@ export class CatAgent {
   private setPurr(env: AgentEnv, on: boolean, intensity = 1): void {
     if (on === this.purring && !on) return;
     this.purring = on;
-    env.sound?.purr(this.id, on, intensity);
   }
 
   /* ------------------------------------------------------------ animation */
@@ -1931,11 +1913,6 @@ export class CatAgent {
   }
 
   dispose(env: AgentEnv | null): void {
-    env?.sound?.purr(this.id, false);
     env?.station?.releaseAll(this.id);
   }
-}
-
-function sound(env: AgentEnv): SoundSynthesizer | null {
-  return env.sound;
 }

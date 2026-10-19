@@ -118,7 +118,7 @@ export class StationModel {
 
   geom(bounds: WorldBounds): StationGeom {
     const s = this.scale;
-    const matW = 172 * s;
+    const matW = 138 * s;
     const matH = 5.5 * s;
     // Leave room on both sides for a cat to stand at either bowl.
     const margin = matW / 2 + 70 * s;
@@ -128,7 +128,7 @@ export class StationModel {
     const floorY = bounds.height - 2;
     const rimY = floorY - matH - 16 * s;
     const bowl = (x: number) => ({ x, rimY, rw: 22 * s, bw: 14.5 * s, h: 16 * s, ry: 4.4 * s });
-    return { cx, floorY, s, matW, matH, bowls: { food: bowl(cx - 40 * s), water: bowl(cx + 40 * s) } };
+    return { cx, floorY, s, matW, matH, bowls: { food: bowl(cx - 32 * s), water: bowl(cx + 32 * s) } };
   }
 
   centerX(bounds: WorldBounds): number {

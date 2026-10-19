@@ -203,8 +203,6 @@ export type Language = 'auto' | 'en' | 'he';
 
 export interface Settings {
   clickThroughLock: boolean;
-  soundEnabled: boolean;
-  volume: number;
   blacklist: string[];
   catScale: number;
   globalPause: boolean;

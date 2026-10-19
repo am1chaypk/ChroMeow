@@ -19,7 +19,6 @@ import { SocialCoordinator } from '../ai/SocialCoordinator';
 import { classifyZone, onCat, type PetZone } from '../ai/HitboxZones';
 import type { IntentKind } from '../ai/UtilityBrain';
 import { ParticleSystem } from '../engine/Particles';
-import type { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import { allPlatforms, type Platform, type PlatformSource } from '../engine/Physics';
 import type { AnyCtx } from '../engine/canvas';
 import { ToyManager } from '../content/ToyManager';
@@ -105,7 +104,6 @@ export class CursorTracker {
 
 export interface WorldOptions {
   source: PlatformSource;
-  sound: SoundSynthesizer | null;
   settings: Settings;
   /** Hostname-independent local clock offset (studio uses real time too). */
   clock?: () => number;
@@ -129,7 +127,6 @@ export class World {
   readonly particles = new ParticleSystem();
   readonly cursor = new CursorTracker();
   source: PlatformSource;
-  sound: SoundSynthesizer | null;
   settings: Settings;
   typing: TypingInfo | null = null;
   platforms: Platform[] = [];
@@ -154,7 +151,6 @@ export class World {
 
   constructor(opts: WorldOptions) {
     this.source = opts.source;
-    this.sound = opts.sound;
     this.settings = opts.settings;
     this.station = new StationModel(opts.station ?? DEFAULT_STATION);
   }
@@ -165,8 +161,6 @@ export class World {
 
   setSettings(s: Settings): void {
     this.settings = s;
-    this.sound?.setEnabled(s.soundEnabled);
-    this.sound?.setVolume(s.volume);
   }
 
   /** Adds / updates / removes agents to match the enabled profiles. */
@@ -204,7 +198,6 @@ export class World {
       typing: this.typing,
       toys: this.toys,
       particles: this.particles,
-      sound: this.sound,
       others: this.agents,
       catScale: this.settings.catScale,
       calm: this.settings.calmMode,
@@ -348,7 +341,6 @@ export class World {
 
   pointerDown(x: number, y: number, tSeconds = this.lastPointerT): boolean {
     this.cursor.down = true;
-    this.sound?.unlock();
     if (!this.interactive) return false;
     if (this.held) return true;
     this.cursor.move(x, y, this.now);
@@ -446,15 +438,13 @@ export class World {
     return this.station.hit(x, y, this.source.bounds());
   }
 
-  /** Fills a bowl to the brim with a pour sound and a little burst. */
+  /** Fills a bowl to the brim with a little kibble / splash burst. */
   refill(kind: BowlKind): void {
     const b = this.source.bounds();
     this.station.refill(kind);
     const g = this.station.geom(b);
     const bowl = g.bowls[kind];
     this.particles.emit(kind === 'food' ? 'kibble' : 'splash', bowl.x, bowl.rimY - 2, kind === 'food' ? 14 : 10, g.s);
-    this.sound?.unlock();
-    this.sound?.pour(kind);
     // Anyone waiting by that bowl reconsiders right away.
     for (const a of this.agents) if (a.planLabel === `beg-${kind}`) a.clearPlan();
   }
@@ -482,7 +472,6 @@ export class World {
       if (s) this.social.end(s);
       a.command('treat', env);
     }
-    this.sound?.meow(1.1, 0.5);
   }
 
   tossLaser(): void {
@@ -513,7 +502,6 @@ export class World {
     }
     if (this.now - this.lastTreatMeow > 2.5) {
       this.lastTreatMeow = this.now;
-      this.sound?.meow(1.1, 0.45);
     }
   }
 
@@ -558,7 +546,6 @@ export class World {
         'called',
       );
     });
-    this.sound?.meow(1.2, 0.4);
   }
 
   /** Studio sandbox: trigger any state on one cat (social ones choreograph both). */

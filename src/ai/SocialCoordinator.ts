@@ -145,7 +145,6 @@ export class SocialCoordinator implements SocialHooks {
           kind: 'do',
           fn: () => {
             b.setPlan([{ kind: 'state', state: 'NOSE_BOOP_GREETING', dur: 99, face: (side > 0 ? 1 : -1) as 1 | -1 }], 'social', true);
-            env.sound?.trill(1 + a.seed * 0.2);
           },
         },
         { kind: 'state', state: 'NOSE_BOOP_GREETING', dur: 99, face: faceA },
@@ -333,7 +332,6 @@ export class SocialCoordinator implements SocialHooks {
       [
         { kind: 'goto', spot: { platformId: p.id, x: spotX }, gait: 'TROT', maxTime: 10 },
         { kind: 'state', state: 'JEALOUSY_INTERVENTION', dur: 4.5, face: () => (petted.x >= jealous.x ? -1 : 1) },
-        { kind: 'do', fn: () => env.sound?.meow(1.15, 0.45) },
         { kind: 'state', state: 'IDLE_SIT', dur: 5 },
         this.finishTask(s),
       ],

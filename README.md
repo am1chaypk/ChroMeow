@@ -26,16 +26,16 @@ Chrome does not inject extensions into `chrome://` pages or the Chrome Web Store
 
 ## Meet the cats
 
-Alex and Anna are enabled out of the box. Both are brown-and-white mackerel tabbies modelled on real cats, with a white bib and belly, the tabby "M" on the forehead, dark eyeliner and a ringed tail with a dark tip.
+Alex and Anna are enabled out of the box. Both are brown-and-white tabbies modelled on real cats, with a white bib and belly, the tabby "M" on the forehead, dark eyeliner and a ringed tail with a dark tip. Their default coats, bodies and personalities are the owner's own tuned versions of the cats.
 
 | | Alex (אלכס) | Anna (אנה) |
 |---|---|---|
-| Coat | Patched brown-grey mackerel tabby with white, warm golden-brown undertones. A white band crosses his back behind the shoulders ("broken saddle"), splitting the tabby shoulder patch from the rear saddle. A warm amber patch (#D47A34 deepening into #B86528) sits low on his flank where the tabby meets the white belly. Wide, slightly lopsided white blaze over the muzzle and cheeks, bubblegum-pink nose, white legs | Classic cool brown/charcoal mackerel tabby with white: crisp #1E1D1B stripes over a cool #6A5D4D ticked coat, one continuous mantle from crown to tail base (no white band, no orange patch). Narrow symmetrical blaze, delicate pink nose, sharp eyeliner, white bib, belly and socks |
-| Build | A little stockier and bigger (size 1.06) | Lighter (size 0.98) |
-| Temperament | Relaxed and affectionate. Loves to sprawl and stretch his front paws out, gets hungry a bit faster, adores head, chin and back rubs, devoted to Anna | Alert, agile cursor hunter with expressive "airplane ears" when annoyed or overstimulated. Often starts grooming sessions and cuddles with Alex |
-| Signature sleep | Chin propped on a ledge (`CHIN_PROP_SLEEP`) | Melted loaf on a narrow ledge (`MELTED_LOAF_SLEEP`), or using Alex as a pillow |
+| Coat | Patched brown tabby with white. A white band crosses his back behind the shoulders ("broken saddle"), splitting the tabby shoulder patch from the rear saddle, and an amber patch sits low on his flank where the tabby meets the white belly. Narrow blaze climbing high up the forehead, tabby front legs with white paws, high white hind stockings, three tail rings | Mantled brown tabby with white: one continuous tabby mantle from crown to tail (no white band, no orange patch) with a small white crest near the rump. Broad, soft blaze, bold cheek stripes, white mittens, seven tail rings |
+| Build | Big and chonky (size 1.2) | A little smaller (size 1.1) |
+| Temperament | Very lazy, very affectionate and a bit sassy. Loves to sprawl and stretch his front paws out, gets hungry a bit faster, adores head, chin and back rubs, devoted to Anna | Keen cursor hunter with expressive "airplane ears" when annoyed or overstimulated. Often starts grooming sessions and cuddles with Alex |
+| Signature sleep | Chin propped on a ledge (`CHIN_PROP_SLEEP`) | Melted loaf on a narrow ledge (`MELTED_LOAF_SLEEP`) |
 
-Rename them in the popup or the Cat Studio (their names show as אלכס and אנה in Hebrew). You can run up to six cats, and switch any of them off or remove them. If you used ChroMeow 1.x, your factory "Cat 1" and "Cat 2" become Alex and Anna on update; any name, colours, paint or photos you changed are kept.
+Rename them in the popup or the Cat Studio (their names show as אלכס and אנה in Hebrew). You can run up to six cats, and switch any of them off or remove them. If you used ChroMeow 1.x, your factory "Cat 1" and "Cat 2" become Alex and Anna on update, and an Alex or Anna still wearing the 2.0 factory coat gets the new defaults. Any name, colours, paint or photos you changed are kept.
 
 ## Using it
 
@@ -46,7 +46,7 @@ Rename them in the popup or the Cat Studio (their names show as אלכס and א�
 - **Pause on this site** (remembered per domain) or **Pause everywhere**
 - **Food & water**: how full each bowl is, **Refill food 🍖** and **Refill water 💧**, and a switch to show or hide the station
 - **Cuddle up when I'm away**: how long without mouse or keyboard input before the cats curl up together (30 seconds to 30 minutes, 2 minutes by default)
-- Sound and volume, cat size, name tags and calm mode
+- Cat size, name tags and calm mode
 - **Open Cat Studio**
 
 **Petting.** Hover over a cat and move the mouse back and forth. Different spots get different reactions:
@@ -64,9 +64,9 @@ Petting for a long time eventually overstimulates a cat (Anna's ears flatten muc
 
 **Picking a cat up.** Press on a cat and drag (more than 5 px), or press right on the scruff behind the ears, to lift it by the scruff. The cat goes calm, half-closes its eyes and hangs below your pointer: front paws dangle, hind legs tuck in, the tail droops, and the body swings with your hand and settles when you hold still. While you hold a cat, the overlay keeps the pointer however fast you move, so you never select text by accident. Let go to drop it or flick to throw it. It falls, lands on the ledge or floor below, and licks a paw to smooth its fur. Leaving the window or a cancelled pointer sets it down gently.
 
-**Food and water.** A mat with a food bowl and a water bowl sits on the bottom of the window (on the right by default). Hunger and thirst build over time, faster with zoomies, pouncing and play. A hungry or thirsty cat walks over, eats or drinks with its head in the bowl (the bowl empties a little), and then sits down for a quick face wash. If the bowl is empty, a very hungry cat sits beside it, looks up at you and meows, with a fish or water-drop thought bubble. Click a bowl to refill it, or drag the mat to move the station. Bowl levels are shared by all tabs.
+**Food and water.** A small mat with a food bowl and a water bowl sits on the bottom of the window (on the right by default). Hunger and thirst build over time, faster with zoomies, pouncing and play. A hungry or thirsty cat walks over, eats or drinks with its head in the bowl (the bowl empties a little), and then sits down for a quick face wash. If the bowl is empty, a very hungry cat sits beside it, and looks up at you with a fish or water-drop thought bubble. Click a bowl to refill it, or drag the mat to move the station. Bowl levels are shared by all tabs.
 
-**When you step away.** After the idle delay with no mouse or keyboard input (or when the computer goes idle or locks), Alex and Anna walk to each other, trade a quick lick and fall asleep pressed together, Anna draped over Alex, breathing in sync. While they sleep, the page scanner slows down to save battery. Move the mouse or press a key and they wake slowly: a long blink, a stretch, a yawn, then Alex trots over to your pointer with his tail up like a question mark, purring.
+**When you step away.** After the idle delay with no mouse or keyboard input (or when the computer goes idle or locks), Alex and Anna walk to each other, trade a quick lick and fall asleep pressed together, Anna draped over Alex, breathing in sync. While they sleep, the page scanner slows down to save battery. Move the mouse or press a key and they wake slowly: a long blink, a stretch, a yawn, then Alex trots over to your pointer with his tail up like a question mark.
 
 **Playing with toys.** After you pick a toy, a small toolbar appears at the top of the page and the left mouse button plays instead of clicking links:
 
@@ -115,7 +115,7 @@ src/
   shared/      types, 56-state catalogue, presets (Alex & Anna, v1 migration), storage, i18n (EN/HE),
                cat files, zip, colour maths
   engine/      Physics, Navigator, DomPlatformScanner, VerletTail, CoatTexture, UVLayout,
-               Pose, PoseLibrary, ArticulatedCatRenderer, SpriteRenderer, SoundSynthesizer,
+               Pose, PoseLibrary, ArticulatedCatRenderer, SpriteRenderer,
                Particles, CatPortrait
   ai/          States (transition graph), FelineFSM, Drives, UtilityBrain, SocialCoordinator,
                HitboxZones
@@ -144,7 +144,7 @@ Spec names map to states like this: FALLING/JUMPING = `FALL_DESCEND`/`JUMP_ASCEN
 
 **Rendering.** Each procedural cat is an articulated 2D rig with realistic proportions: a small skull on a short neck, a torso with deep chest, waist and primordial pouch and shoulder blades that roll as it walks, digitigrade legs (thigh to hock to long metatarsus behind; elbow, wrist and pastern in front) solved with two-bone IK, and a six-node Verlet tail (Jakobsen relaxation, bend limits, ledge collision). Coats are painted into a 512×512 UV atlas from the palette, pattern masks, fur-stroke tabby markings and your brush strokes, then mapped onto the body as seamless triangle strips. Every frame the furred parts are painted into an offscreen layer at screen resolution and lit as one body: a world-fixed key light, soft core shadow, sheen and ambient occlusion from blurred silhouettes, contact shadows where parts overlap, and hair fringes instead of outlines. The face has layered irises with slit pupils and wet highlights, nose leather with nostrils, whisker pads and tapered whiskers.
 
-**Motion.** Poses blend with critically damped springs, so every change eases in and out and a target that changes mid-move never kinks. Paws stay planted during the stance phase, swing with eased acceleration, and the head stays steady while the body walks. Blinks close fast and open slowly, idle cats glance around, and turning around is an eased swing rather than a flip. Sounds (purrs, meows, trills, chirps) are synthesised with the Web Audio API.
+**Motion.** Poses blend with critically damped springs, so every change eases in and out and a target that changes mid-move never kinks. Paws stay planted during the stance phase, swing with eased acceleration, and the head stays steady while the body walks. Blinks close fast and open slowly, idle cats glance around, and turning around is an eased swing rather than a flip.
 
 ## Development
 
@@ -192,8 +192,10 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 
 אלכס ואנה פעילים כבר מההתחלה. שניהם טאבי מקרל חום-לבן בדמות חתולים אמיתיים: חזה ובטן לבנים, סימן ה-M על המצח, "אייליינר" כהה וזנב עם טבעות וקצה כהה.
 
-- **אלכס**: טאבי מקרל חום-אפור מוטלא עם לבן וגוונים חמים. פס לבן חוצה את הגב מאחורי הכתפיים ("אוכף שבור"), וכתם ענבר חם (#D47A34 שמעמיק ל-#B86528) נמצא נמוך בצד, היכן שהטאבי פוגש את הבטן הלבנה. להבה לבנה רחבה ולא סימטרית על הלוע והלחיים, אף ורוד, רגליים לבנות. קצת יותר חסון. רגוע ומלא חיבה: אוהב להשתרע ולמתוח את הכפות הקדמיות, נעשה רעב קצת יותר מהר, מת על ליטופים בראש, בסנטר ובגב, ומסור לאנה.
-- **אנה**: טאבי מקרל קלאסי בגוון חום-פחם קריר עם לבן: פסים כהים וחדים על פרווה אפרפרה, וגלימת טאבי אחת רציפה מהראש ועד בסיס הזנב (בלי פס לבן ובלי כתם כתום). להבה צרה וסימטרית, אף ורוד עדין, אייליינר חד, חזה, בטן וגרביים לבנים. ציידת זריזה של סמן העכבר עם "אוזני מטוס" כשהיא מתעצבנת, ולרוב היא זו שמתחילה ללקק ולהתכרבל עם אלכס.
+- **אלכס**: טאבי חום מוטלא עם לבן, גדול ושמנמן. פס לבן חוצה את הגב מאחורי הכתפיים ("אוכף שבור"), וכתם ענבר נמצא נמוך בצד, היכן שהטאבי פוגש את הבטן הלבנה. להבה צרה שעולה גבוה על המצח, רגליים קדמיות מפוספסות עם כפות לבנות, גרביים לבנים גבוהים מאחור. עצלן מאוד, מלא חיבה וקצת חצוף: אוהב להשתרע ולמתוח את הכפות הקדמיות, נעשה רעב קצת יותר מהר, מת על ליטופים בראש, בסנטר ובגב, ומסור לאנה.
+- **אנה**: טאבי חום עם גלימה ולבן: גלימת טאבי אחת רציפה מהראש ועד הזנב (בלי פס לבן ובלי כתם כתום) עם כתם לבן קטן ליד העכוז. להבה רחבה ורכה, פסי לחיים בולטים, כפפות לבנות. ציידת נלהבת של סמן העכבר עם "אוזני מטוס" כשהיא מתעצבנת, ולרוב היא זו שמתחילה ללקק ולהתכרבל עם אלכס.
+
+ברירות המחדל של הפרווה, הגוף והאישיות הן הגרסאות שהבעלים כיוונו בעצמם.
 
 אפשר לשנות את השמות בחלון הקופץ או בסטודיו, ולהוסיף עד שישה חתולים. מי שהשתמש ב-ChroMeow 1.x יקבל את "חתול 1" ו"חתול 2" כאלכס ואנה; שם, צבעים, ציור ותמונות ששיניתם נשמרים.
 
@@ -206,16 +208,16 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 - להשהות באתר הנוכחי (נשמר לפי דומיין) או בכל מקום
 - **אוכל ומים**: כמה מלאה כל קערה, **מילוי אוכל 🍖** ו**מילוי מים 💧**, ומתג להצגה או הסתרה של פינת האוכל
 - **להתכרבל יחד כשאני לא ליד המחשב**: אחרי כמה זמן בלי עכבר ומקלדת החתולים מתכרבלים (30 שניות עד 30 דקות, ברירת המחדל 2 דקות)
-- צליל ועוצמה, גודל החתולים, תגיות שם ומצב רגוע
+- גודל החתולים, תגיות שם ומצב רגוע
 - לפתוח את סטודיו החתולים
 
 **ליטוף.** העבירו את העכבר הלוך ושוב מעל החתול. סנטר ולחיים: גרגור בעיניים חצי עצומות. ראש ואוזניים: רעד באוזניים, גרגור ואז לישת עוגיות. גב ובסיס הזנב: "מעלית" עם הישבן וגרגור. כפות קדמיות: קיפול כפות. בטן: התגלגלות על הגב, ואז לפי מצב הרוח נהנים או עונים בבעיטות ובחבטה. זנב: הצלפות זנב ואוזני מטוס. ליטוף ארוך של חתול אחד (כשמונה שניות) עלול להביא את השני לדחוף את עצמו פנימה.
 
 **הרמת חתול.** לוחצים על חתול וגוררים (יותר מ-5 פיקסלים), או לוחצים ישר על העורף מאחורי האוזניים, והחתול מורם בעורף. הוא נרגע, עוצם חצי עיניים ותלוי מתחת לסמן: הכפות הקדמיות משתלשלות, הרגליים האחוריות מתקפלות פנימה, הזנב צונח והגוף מתנדנד עם היד ונרגע כשהיא עומדת. בזמן ההחזקה הסמן ננעל על השכבה של החתולים, כך שגם תנועה מהירה לא בוחרת טקסט בדף. משחררים כדי להוריד, או מנערים כדי לזרוק. החתול נופל, נוחת על המדף או הרצפה, ומלקק כף כדי ליישר את הפרווה.
 
-**אוכל ומים.** בתחתית החלון (מימין כברירת מחדל) יש מחצלת עם קערת אוכל וקערת מים. רעב וצמא מצטברים עם הזמן, מהר יותר אחרי ריצות ומשחק. חתול רעב או צמא הולך לקערה, אוכל או שותה, ואחר כך מתיישב לרחיצת פנים קצרה. כשהקערה ריקה, חתול רעב מאוד מתיישב לידה, מסתכל עליכם ומיילל, עם בועת מחשבה של דג או טיפת מים. לחיצה על קערה ממלאת אותה, וגרירת המחצלת מזיזה את הפינה. כמות האוכל משותפת לכל הלשוניות.
+**אוכל ומים.** בתחתית החלון (מימין כברירת מחדל) יש מחצלת עם קערת אוכל וקערת מים. רעב וצמא מצטברים עם הזמן, מהר יותר אחרי ריצות ומשחק. חתול רעב או צמא הולך לקערה, אוכל או שותה, ואחר כך מתיישב לרחיצת פנים קצרה. כשהקערה ריקה, חתול רעב מאוד מתיישב לידה ומסתכל עליכם, עם בועת מחשבה של דג או טיפת מים. לחיצה על קערה ממלאת אותה, וגרירת המחצלת מזיזה את הפינה. כמות האוכל משותפת לכל הלשוניות.
 
-**כשאתם הולכים.** אחרי זמן ההמתנה בלי עכבר ומקלדת (או כשהמחשב ננעל), אלכס ואנה הולכים זה אל זה, מלקקים זה את זה לרגע ונרדמים צמודים, אנה שעונה על אלכס, נושמים באותו קצב. כשאתם חוזרים הם מתעוררים לאט: מצמוץ ארוך, מתיחה, פיהוק, ואז אלכס ניגש לסמן עם זנב בצורת סימן שאלה ומגרגר.
+**כשאתם הולכים.** אחרי זמן ההמתנה בלי עכבר ומקלדת (או כשהמחשב ננעל), אלכס ואנה הולכים זה אל זה, מלקקים זה את זה לרגע ונרדמים צמודים, אנה שעונה על אלכס, נושמים באותו קצב. כשאתם חוזרים הם מתעוררים לאט: מצמוץ ארוך, מתיחה, פיהוק, ואז אלכס ניגש לסמן עם זנב בצורת סימן שאלה .
 
 **משחק עם צעצועים.** אחרי שבוחרים צעצוע מופיע סרגל קטן בראש הדף, והכפתור השמאלי משחק במקום ללחוץ על קישורים. חטיפים: לחיצה בכל מקום מפילה חטיף. לייזר: מחזיקים את הכפתור והנקודה זזה עם העכבר. כדור: לוחצים, גוררים ומשחררים כדי לזרוק. <kbd>Esc</kbd>, לחיצה ימנית או "סיום" מחזירים את הדף לרגיל.
 

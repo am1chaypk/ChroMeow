@@ -22,8 +22,6 @@ export const IDLE_THRESHOLD_RANGE: readonly [number, number] = [30, 1800];
 
 export const DEFAULT_SETTINGS: Settings = {
   clickThroughLock: false,
-  soundEnabled: true,
-  volume: 0.45,
   blacklist: [],
   catScale: 1,
   globalPause: false,
@@ -55,12 +53,14 @@ async function localSet(key: string, value: unknown): Promise<void> {
 }
 
 export function normalizeSettings(raw: unknown): Settings {
-  const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<Settings>;
+  const s = { ...((raw && typeof raw === 'object' ? raw : {}) as Partial<Settings> & Record<string, unknown>) };
+  // Sound was removed in 2.0: drop the old settings keys.
+  delete s.soundEnabled;
+  delete s.volume;
   return {
     ...DEFAULT_SETTINGS,
     ...s,
     blacklist: Array.isArray(s.blacklist) ? s.blacklist.filter((h) => typeof h === 'string') : [],
-    volume: typeof s.volume === 'number' ? Math.min(1, Math.max(0, s.volume)) : DEFAULT_SETTINGS.volume,
     catScale: typeof s.catScale === 'number' ? Math.min(1.8, Math.max(0.5, s.catScale)) : DEFAULT_SETTINGS.catScale,
     idleThreshold:
       typeof s.idleThreshold === 'number' && Number.isFinite(s.idleThreshold)

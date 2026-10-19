@@ -16,7 +16,7 @@ const B: WorldBounds = { width: 1200, height: 700 };
 const DT = 1 / 30;
 
 function makeWorld(cats = [createAlex()], source: PlatformSource = new StaticPlatformSource(B, [])): World {
-  const w = new World({ source, sound: null, settings: { ...DEFAULT_SETTINGS }, station: { enabled: true, xNormalized: 0.75, foodLevel: 80, waterLevel: 80 } });
+  const w = new World({ source, settings: { ...DEFAULT_SETTINGS }, station: { enabled: true, xNormalized: 0.75, foodLevel: 80, waterLevel: 80 } });
   w.setProfiles(cats);
   return w;
 }

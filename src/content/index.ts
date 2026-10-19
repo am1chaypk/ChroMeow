@@ -16,7 +16,6 @@ import { isRuntimeMessage, sendRuntime, type HydrateResponse, type TabMessage } 
 import { KEY_PROFILES, KEY_SETTINGS, KEY_STATION, isBlacklisted, loadProfiles, loadSettings, loadStation, normalizeProfiles, normalizeSettings, normalizeStation, patchStation } from '../shared/storage';
 import type { BowlKind, CatProfile, FeedingStation, PageInfo, Settings } from '../shared/types';
 import { DomPlatformScanner } from '../engine/DomPlatformScanner';
-import { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import { World } from '../sim/World';
 import { renderQuality } from '../engine/ArticulatedCatRenderer';
 import { useLanguage } from '../shared/i18n';
@@ -42,7 +41,6 @@ class ContentApp {
   private world: World | null = null;
   private input: InputInterceptor | null = null;
   private play: PlayMode | null = null;
-  private sound = new SoundSynthesizer();
   private raf = 0;
   private last = 0;
   private frame = 0;
@@ -85,9 +83,7 @@ class ContentApp {
     const scanner = new DomPlatformScanner(overlay.host);
     scanner.start();
     this.scanner = scanner;
-    this.sound.setEnabled(this.settings.soundEnabled);
-    this.sound.setVolume(this.settings.volume);
-    const world = new World({ source: scanner, sound: this.sound, settings: this.settings, station: this.station });
+    const world = new World({ source: scanner, settings: this.settings, station: this.station });
     world.interactive = !this.settings.clickThroughLock;
     world.setProfiles(this.profiles);
     world.hooks = {
@@ -99,7 +95,6 @@ class ContentApp {
     overlay.setStationHandlers({
       hit: (x, y) => (this.play?.active ? null : world.stationHit(x, y)),
       refill: (kind) => {
-        this.sound.unlock();
         world.refill(kind);
         this.saveStation(true);
       },
@@ -152,8 +147,6 @@ class ContentApp {
     this.scanner?.stop();
     this.world?.dispose();
     this.overlay?.unmount();
-    this.sound.dispose();
-    this.sound = new SoundSynthesizer();
     this.input = null;
     this.scanner = null;
     this.world = null;
@@ -211,7 +204,7 @@ class ContentApp {
     const w = this.world;
     if (!w) return;
     w.setStation(next);
-    // A refill from the popup gets the same pour sound and kibble burst as a click on the bowl.
+    // A refill from the popup gets the same kibble / splash burst as a click on the bowl.
     for (const k of ['food', 'water'] as BowlKind[]) {
       const before = k === 'food' ? prev.foodLevel : prev.waterLevel;
       const after = k === 'food' ? next.foodLevel : next.waterLevel;
@@ -350,7 +343,6 @@ class ContentApp {
       case 'cm:action': {
         const w = this.world;
         if (!w) return { ok: false };
-        this.sound.unlock();
         if (msg.action === 'treat') w.dropTreat();
         else if (msg.action === 'laser') w.tossLaser();
         else if (msg.action === 'ball') w.tossBall();
@@ -359,7 +351,6 @@ class ContentApp {
       }
       case 'cm:play': {
         if (!this.world || !this.play) return { ok: false };
-        this.sound.unlock();
         this.play.set(msg.tool);
         return { ok: true, tool: this.play.current };
       }

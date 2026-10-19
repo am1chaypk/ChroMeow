@@ -2,7 +2,7 @@
  * PopupController — status cards for each cat (live portrait, editable name,
  * state badge, energy/affection meters) plus toys, the food & water station
  * (levels, refill buttons, show / hide), click-through lock, per-site pause, the
- * idle-cuddle delay, sound and size controls. Talks to the active tab's content
+ * idle-cuddle delay and size controls. Talks to the active tab's content
  * script and to the service worker; never to the network.
  */
 import { isCatState, type CatState } from '../shared/catStates';
@@ -235,12 +235,6 @@ class PopupController {
       this.settings = await patchSettings({ blacklist: list });
       this.renderControls();
     });
-    $('sound').addEventListener('change', async (e) => {
-      this.settings = await patchSettings({ soundEnabled: (e.target as HTMLInputElement).checked });
-    });
-    $('volume').addEventListener('change', async (e) => {
-      this.settings = await patchSettings({ volume: Number((e.target as HTMLInputElement).value) });
-    });
     $('scale').addEventListener('change', async (e) => {
       this.settings = await patchSettings({ catScale: Number((e.target as HTMLInputElement).value) });
     });
@@ -318,8 +312,6 @@ class PopupController {
     site.checked = paused;
     site.disabled = !host;
     $('siteSub').textContent = host || '—';
-    ($('sound') as HTMLInputElement).checked = s.soundEnabled;
-    ($('volume') as HTMLInputElement).value = String(s.volume);
     ($('scale') as HTMLInputElement).value = String(s.catScale);
     ($('names') as HTMLInputElement).checked = s.showNameTags;
     ($('calm') as HTMLInputElement).checked = s.calmMode;

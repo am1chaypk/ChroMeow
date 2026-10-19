@@ -7,7 +7,6 @@
 import type { CatState } from '../shared/catStates';
 import type { CatProfile, Settings } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/storage';
-import { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import { StaticPlatformSource, type StaticLedge } from '../sim/StaticPlatformSource';
 import { ToyTool } from '../sim/ToyTool';
 import { World } from '../sim/World';
@@ -24,7 +23,6 @@ export class PreviewSandbox {
   readonly world: World;
   private readonly source: StaticPlatformSource;
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly sound = new SoundSynthesizer();
   private boxes: Box[] = [];
   private raf = 0;
   private last = 0;
@@ -42,7 +40,7 @@ export class PreviewSandbox {
   constructor(private readonly canvas: HTMLCanvasElement, settings: Settings = DEFAULT_SETTINGS) {
     this.ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
     this.source = new StaticPlatformSource({ width: this.w, height: this.h }, []);
-    this.world = new World({ source: this.source, sound: this.sound, settings: { ...settings, showNameTags: true } });
+    this.world = new World({ source: this.source, settings: { ...settings, showNameTags: true } });
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(canvas);
     this.resize();
@@ -60,7 +58,6 @@ export class PreviewSandbox {
     });
     canvas.addEventListener('pointerdown', (e) => {
       const p = this.local(e);
-      this.sound.unlock();
       if (this.tool.active) {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -266,6 +263,5 @@ export class PreviewSandbox {
     this.stop();
     this.ro.disconnect();
     this.world.dispose();
-    this.sound.dispose();
   }
 }

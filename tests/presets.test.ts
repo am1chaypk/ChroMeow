@@ -15,61 +15,47 @@ describe('built-in cats: Alex & Anna', () => {
     expect(cats.map((c) => c.version)).toEqual([PROFILE_VERSION, PROFILE_VERSION]);
   });
 
-  it('models Alex: patched tabby with a white saddle band, amber flank patch and wide lopsided blaze', () => {
+  it('models Alex: big patched tabby with a white saddle band and an amber flank patch (owner-tuned defaults)', () => {
     const c = createAlex();
     expect(c.pattern).toBe('PATCHED_TABBY_HARLEQUIN');
     // Broken saddle: a white band crosses the back behind the shoulders.
     expect(c.markings.shoulderBand).toBe(true);
-    // Warm rufous / amber flank patch, #D47A34 deepening into #B86528.
     expect(c.markings.flankPatch).toBe(true);
-    expect(c.palette.flankPatch).toBe('#D47A34');
-    expect(c.palette.rufus).toBe('#B86528');
+    expect(c.palette.flankPatch).toBe('#C47D38');
     expect(isWarmAmber(c.palette.flankPatch)).toBe(true);
-    expect(c.palette.noseLeather).toBe('#E88B9C');
-    expect(c.palette.baseWhite).toBe('#F8F7F4');
-    expect(c.markings.blazeWidth).toBeGreaterThan(0.6);
-    expect(c.markings.blazeAsymmetry).toBeGreaterThan(0.3);
-    expect(c.markings.frontLegWhite).toBe(1);
-    expect(c.markings.hindLegWhite).toBeGreaterThan(0.85);
-    expect(c.markings.tailTipDark).toBe(true);
-    expect(c.markings.tailRings).toBeGreaterThanOrEqual(5);
-    // Slightly stockier and bigger than Anna.
-    expect(c.morphology.size).toBe(1.06);
-    expect(c.morphology.chonk).toBeGreaterThan(createAnna().morphology.chonk);
+    expect(c.palette.rufus).toBe('#3F3B36');
+    expect(c.palette.patchSecondary).toBe('#292624');
+    expect(c.markings).toMatchObject({ whiteAmount: 0.5, blazeWidth: 0.34, blazeHeight: 0.92, blazeAsymmetry: 0.55, cheekStripes: 0.2, frontLegWhite: 0.26, hindLegWhite: 0.85, tailRings: 3 });
+    expect(c.morphology).toMatchObject({ chonk: 1.3, size: 1.2 });
+    expect(c.personality).toEqual({ laziness: 0.85, huntDrive: 0.6, sociability: 0.8, sassiness: 0.7, clumsiness: 0.4, affection: 1 });
+    expect(c.signature).toEqual({ chinPropSleep: true, meltedLoafSleep: false, airplaneSquint: true, pillowSnuggler: false, widePawSplay: true });
+    expect(c.morphology.size).toBeGreaterThan(createAnna().morphology.size);
   });
 
-  it('models Anna: cool charcoal mackerel tabby with one unbroken mantle', () => {
+  it('models Anna: mantled tabby with one unbroken mantle and a rump crest (owner-tuned defaults)', () => {
     const c = createAnna();
     expect(c.pattern).toBe('MANTLED_BICOLOR_TABBY');
-    expect(c.palette.tabbyStripe).toBe('#1E1D1B');
-    expect(c.palette.tabbyBase).toBe('#6A5D4D');
     // No white band across the back and no orange patch.
     expect(c.markings.shoulderBand).toBe(false);
     expect(c.markings.flankPatch).toBe(false);
-    expect(c.markings.rumpCrest).toBe(false);
-    expect(c.markings.blazeWidth).toBeLessThan(createAlex().markings.blazeWidth);
-    expect(c.markings.blazeAsymmetry).toBe(0);
-    expect(c.markings.mMark).toBe(true);
-    expect(c.markings.eyeliner).toBeGreaterThan(0.9);
-    expect(c.morphology.size).toBe(0.98);
+    expect(c.markings).toMatchObject({ whiteAmount: 0.4, blazeWidth: 0.62, blazeSoftness: 0.62, blazeAsymmetry: 0, rumpCrest: true, cheekStripes: 0.9, frontLegWhite: 0.85, tailRings: 7 });
+    expect(c.palette).toMatchObject({ tabbyBase: '#7A6855', tabbyStripe: '#2A241E', eyeLeft: '#86A160', eyeRight: '#6E8C52' });
+    expect(c.morphology).toMatchObject({ chonk: 1.25, size: 1.1 });
+    expect(c.personality).toEqual({ laziness: 0.7, huntDrive: 0.85, sociability: 0.9, sassiness: 0.7, clumsiness: 0.3, affection: 0.85 });
+    expect(c.signature).toEqual({ chinPropSleep: true, meltedLoafSleep: true, airplaneSquint: true, pillowSnuggler: false, widePawSplay: true });
   });
 
-  it('gives each cat its own personality and quirks', () => {
+  it('gives each cat its own quirks', () => {
     const alex = createAlex();
     const anna = createAnna();
-    // Alex: relaxed, affectionate, a sprawler with a slightly bigger appetite who adores head / chin / back rubs.
     expect(alex.traits.hungerRateMultiplier).toBe(1.15);
     expect(alex.personality.laziness).toBeGreaterThan(anna.personality.laziness);
-    expect(alex.personality.affection).toBeGreaterThanOrEqual(0.9);
     expect(alex.traits.pettingAffinity).toBeGreaterThan(1.3);
     expect(alex.traits.sprawlLover).toBeGreaterThan(0.8);
-    expect(alex.signature.widePawSplay).toBe(true);
     expect(alex.traits.bondedWith).toBe(ANNA_ID);
-    // Anna: an agile hunter with expressive airplane ears who starts grooming and cuddles.
-    expect(anna.personality.huntDrive).toBeGreaterThan(0.85);
+    expect(anna.personality.huntDrive).toBeGreaterThan(alex.personality.huntDrive);
     expect(anna.traits.playfulness).toBeGreaterThan(0.8);
     expect(anna.traits.earExpressiveness).toBeGreaterThan(0.85);
-    expect(anna.signature.airplaneSquint).toBe(true);
     expect(anna.traits.socialInitiative).toBeGreaterThan(alex.traits.socialInitiative);
     expect(anna.traits.bondedWith).toBe(ALEX_ID);
   });
@@ -112,7 +98,7 @@ describe('v1 → v2 migration', () => {
     expect(alex.id).toBe('alex');
     expect(alex.name).toBe('Alex');
     expect(alex.presetKey).toBe('alex');
-    expect(alex.palette.flankPatch).toBe('#D47A34');
+    expect(alex.palette).toEqual(createAlex().palette);
     expect(alex.enabled).toBe(false);
     expect(alex.photos).toHaveLength(1);
     expect(alex.version).toBe(PROFILE_VERSION);
@@ -126,7 +112,17 @@ describe('v1 → v2 migration', () => {
     expect(out.traits?.hungerRateMultiplier).toBe(1.15);
   });
 
-  it('is a no-op for v2 profiles and non-factory cats', () => {
+  it('gives an Alex still wearing the v2.0 factory coat the new defaults, but leaves an edited one alone', () => {
+    const v2 = { ...createAlex(), version: 2, palette: { baseWhite: '#F8F7F4', undercoatWarm: '#F0ECE4', tabbyBase: '#7E6A53', tabbyStripe: '#28211B', rufus: '#B86528', flankPatch: '#D47A34', patchSecondary: '#C9873F', noseLeather: '#E88B9C', pawPads: '#E595A0', innerEar: '#E29BA3', eyeLeft: '#9DAA5E', eyeRight: '#8E9F55', eyeRim: '#1E1A16' }, name: 'Alexei' };
+    const [up] = normalizeProfiles([v2]);
+    expect(up.palette).toEqual(createAlex().palette);
+    expect(up.morphology.size).toBe(1.2);
+    expect(up.name).toBe('Alexei');
+    const edited = { ...v2, palette: { ...v2.palette, tabbyBase: '#111111' } };
+    expect(normalizeProfiles([edited])[0].palette.tabbyBase).toBe('#111111');
+  });
+
+  it('is a no-op for current profiles and non-factory cats', () => {
     const alex = createAlex();
     expect(migrateProfile(alex, new Set())).toBe(alex);
     const ginger = { presetKey: 'ginger-mackerel', version: 1 } as Partial<CatProfile>;
@@ -140,8 +136,8 @@ describe('Studio colour tools preserve Alex’s markings', () => {
     // A dull beige "rufous" cluster from a dim photo must not replace the amber patch…
     const merged = mergePalette(alex, { tabbyBase: '#6F6151', flankPatch: '#9C8B76', rufus: '#8E826F' });
     expect(merged.tabbyBase).toBe('#6F6151');
-    expect(merged.flankPatch).toBe('#D47A34');
-    expect(merged.rufus).toBe('#B86528');
+    expect(merged.flankPatch).toBe('#C47D38');
+    expect(merged.rufus).toBe('#3F3B36');
     // …but a genuinely amber sample is taken.
     expect(mergePalette(alex, { flankPatch: '#D9803A' }).flankPatch).toBe('#D9803A');
     // Markings are not part of a palette merge at all.
@@ -180,8 +176,8 @@ describe('settings, station & per-site pause', () => {
   });
 
   it('clamps out-of-range values', () => {
-    const s = normalizeSettings({ volume: 5, catScale: 0.1, idleThreshold: 2 });
-    expect(s.volume).toBe(1);
+    const s = normalizeSettings({ volume: 5, soundEnabled: true, catScale: 0.1, idleThreshold: 2 });
+    expect('volume' in s || 'soundEnabled' in s).toBe(false); // sound settings were removed
     expect(s.catScale).toBe(0.5);
     expect(s.idleThreshold).toBe(30);
     expect(normalizeSettings({}).idleThreshold).toBe(120);
