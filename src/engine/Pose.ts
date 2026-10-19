@@ -111,7 +111,7 @@ export const STAND_POSE: Pose = {
   headX: 33,
   headY: -55,
   headRot: 0,
-  faceTurn: 0.35,
+  faceTurn: 0.5,
   earL: 0,
   earR: 0,
   eyeOpen: 1,
@@ -180,4 +180,53 @@ export function blendPose(from: Pose, to: Pose, t: number, out: Pose): Pose {
 export function followPose(cur: Pose, target: Pose, rate: number, dt: number): Pose {
   const t = 1 - Math.exp(-rate * dt);
   return blendPose(cur, target, t, cur);
+}
+
+/**
+ * Critically damped pose follower (per-key "SmoothDamp"). Unlike an exponential
+ * follow, every key keeps a velocity, so transitions ease in *and* out and a
+ * target that changes mid-motion is absorbed without a visible kink — the
+ * difference between a puppet snapping between poses and an animal moving.
+ */
+export class PoseSpring {
+  private vel: Record<string, number> = {};
+
+  reset(): void {
+    this.vel = {};
+  }
+
+  /**
+   * Moves `cur` toward `target`. `rate` keeps the meaning it had for the old
+   * exponential follow (≈1/time-constant), so callers' tuning carries over.
+   */
+  step(cur: Pose, target: Pose, rate: number, dt: number): Pose {
+    if (dt <= 0) return cur;
+    const smoothTime = Math.max(0.02, 1.7 / Math.max(0.1, rate));
+    const omega = 2 / smoothTime;
+    const x = omega * dt;
+    const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+    for (const k of POSE_KEYS) {
+      const angle = ANGLE_KEYS.has(k);
+      const c = cur[k];
+      const t = angle ? c + wrap(target[k] - c) : target[k];
+      const change = c - t;
+      const v = this.vel[k] ?? 0;
+      const temp = (v + omega * change) * dt;
+      const nv = (v - omega * temp) * exp;
+      let out = t + (change + temp) * exp;
+      // Never overshoot the target.
+      if (t - c > 0 === out > t) {
+        out = t;
+        this.vel[k] = 0;
+      } else this.vel[k] = nv;
+      cur[k] = out;
+    }
+    return cur;
+  }
+
+  /** Pins a key to a value (e.g. gait-driven feet) and zeroes its velocity. */
+  pin(cur: Pose, key: keyof Pose, value: number): void {
+    cur[key] = value;
+    this.vel[key] = 0;
+  }
 }

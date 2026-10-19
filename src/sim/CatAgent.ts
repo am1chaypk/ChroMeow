@@ -11,7 +11,7 @@
  * Petting, pokes, toys and social directives feed back into drives and plans.
  */
 import type { CatState } from '../shared/catStates';
-import { clamp, clamp01, dist, type Vec2 } from '../shared/math';
+import { clamp, clamp01, dist, noise1, smoothstep, type Vec2 } from '../shared/math';
 import { Rng, hashString } from '../shared/rng';
 import type { CatProfile, CatRuntimeSnapshot, Drives } from '../shared/types';
 import { FelineFSM } from '../ai/FelineFSM';
@@ -22,7 +22,7 @@ import { ZONE_EFFECTS, type PetZone } from '../ai/HitboxZones';
 import { ArticulatedCatRenderer, type Landmarks, type Skeleton } from '../engine/ArticulatedCatRenderer';
 import { SpriteRenderer } from '../engine/SpriteRenderer';
 import { DEFAULT_POSE_CONTEXT, GAITS, canLook, computePose, type PoseContext } from '../engine/PoseLibrary';
-import { clonePose, followPose, makePose, type Pose } from '../engine/Pose';
+import { PoseSpring, clonePose, makePose, type Pose } from '../engine/Pose';
 import { VerletTail, type TailParams } from '../engine/VerletTail';
 import { findLanding, isScrollViolent, platformBelow, platformWidth, solveJump, trajectoryAt, applyFriction, fallStep, type JumpPlan, type Platform, type PlatformSource, type WorldBounds } from '../engine/Physics';
 import { planRoute, type NavJump, type NavPlan } from '../engine/Navigator';
@@ -151,6 +151,9 @@ export class CatAgent {
   private lastPetAt = -10;
   private bellyVerdict: 'bliss' | 'kick' | null = null;
   private blinkT = -1;
+  private readonly poseSpring = new PoseSpring();
+  /** Idle glance: a held gaze offset that makes an awake cat look around on its own. */
+  private glance = { x: 0, y: 0, t: 0, next: 3 };
   private nextBlink = 3;
   private earTwitch = 0;
   private earTwitchSide: 1 | -1 = 1;
@@ -325,13 +328,20 @@ export class CatAgent {
     // Blink
     if (this.blinkT >= 0) {
       this.blinkT += dt;
-      if (this.blinkT > 0.16) this.blinkT = -1;
+      if (this.blinkT > 0.21) this.blinkT = -1;
     } else {
       this.nextBlink -= dt;
       if (this.nextBlink <= 0) {
         this.blinkT = 0;
-        this.nextBlink = this.rng.range(2.2, 6.5);
+        // Cats blink rarely and slowly; now and then a quick double blink.
+        this.nextBlink = this.rng.chance(0.18) ? 0.32 : this.rng.range(3, 9);
       }
+    }
+    // Idle glances.
+    this.glance.next -= dt;
+    if (this.glance.t > 0) this.glance.t -= dt;
+    if (this.glance.next <= 0) {
+      this.glance = { x: this.rng.range(-0.7, 0.8), y: this.rng.range(-0.45, 0.35), t: this.rng.range(0.7, 2.4), next: this.rng.range(3, 9) };
     }
     // Sleeping cats drift little z's.
     if (this.isAsleep() && this.rng.chance(dt * 0.35) && this.lm) env.particles.emit('z', this.lm.head.x + this.facing * 8 * this.S, this.lm.head.y - 12 * this.S, 1, this.S);
@@ -949,8 +959,10 @@ export class CatAgent {
     const W = env.bounds.width;
     // Turn animation (flip passes through 0 for a quick "turn around" squash).
     if (this.flip !== this.facing) {
-      const step = dt * 11;
-      this.flip = Math.abs(this.facing - this.flip) <= step ? this.facing : this.flip + Math.sign(this.facing - this.flip) * step;
+      // Cosine-eased turn (~0.3 s): slow out of profile, quick through the front view, settle in.
+      const p = Math.acos(clamp(-this.flip * this.facing, -1, 1)) / Math.PI;
+      const np = Math.min(1, p + dt / 0.3);
+      this.flip = np >= 1 ? this.facing : -this.facing * Math.cos(np * Math.PI);
     }
 
     if (this.climb) {
@@ -1283,6 +1295,7 @@ export class CatAgent {
 
   private animate(dt: number, env: AgentEnv): void {
     const state = this.fsm.current;
+    const meta0 = STATE_META[state];
     const ctx = this.poseContext(env, state);
     let target: Pose;
     if (this.climb && state === 'EDGE_PEEK') {
@@ -1313,22 +1326,32 @@ export class CatAgent {
       if (this.earTwitchSide > 0) target.earR += tw;
       else target.earL += tw;
     }
-    if (this.blinkT >= 0 && target.eyeOpen > 0.15) target.eyeOpen *= 1 - Math.sin((this.blinkT / 0.16) * Math.PI);
+    if (this.blinkT >= 0 && target.eyeOpen > 0.15) {
+      // Fast close, brief hold, slower open.
+      const b = this.blinkT;
+      const closed = b < 0.06 ? smoothstep(0, 0.06, b) : b < 0.085 ? 1 : 1 - smoothstep(0.085, 0.21, b);
+      target.eyeOpen *= 1 - closed;
+    }
+    // Life while idle: slow head drift and the occasional glance around.
+    const calm = !meta0.locomotion && meta0.posture !== 'air' && !this.isAsleep() && !this.isPetted();
+    if (calm) {
+      const tt = env.now;
+      target.headRot += noise1(tt * 0.33, this.seed * 91) * 0.035;
+      if (this.glance.t > 0 && this.lookActive < 0.5) {
+        const w = smoothstep(0, 0.25, this.glance.t) * (1 - this.lookActive * 2);
+        target.lookX += (this.glance.x - target.lookX) * w;
+        target.lookY += (this.glance.y - target.lookY) * w;
+        target.headRot += this.glance.y * 0.18 * w;
+      }
+    }
 
     // Blend toward the target pose; airborne & reactive states blend faster.
     const meta = STATE_META[state];
     const rate = meta.posture === 'air' ? 14 : meta.posture === 'sleep' ? 3.2 : state === 'POUNCE_AND_PIN' || state === 'BUNNY_KICK_SWAT' || state === 'TAIL_LASH' ? 12 : meta.locomotion ? 10 : 6.5;
     // Gait-driven feet must not lag (prevents foot skating).
-    followPose(this.pose, target, rate, dt);
+    this.poseSpring.step(this.pose, target, rate, dt);
     if (meta.locomotion) {
-      this.pose.fnX = target.fnX;
-      this.pose.fnY = target.fnY;
-      this.pose.ffX = target.ffX;
-      this.pose.ffY = target.ffY;
-      this.pose.hnX = target.hnX;
-      this.pose.hnY = target.hnY;
-      this.pose.hfX = target.hfX;
-      this.pose.hfY = target.hfY;
+      for (const k of ['fnX', 'fnY', 'ffX', 'ffY', 'hnX', 'hnY', 'hfX', 'hfY'] as const) this.poseSpring.pin(this.pose, k, target[k]);
     }
 
     // Skeleton + tail (world-space Verlet).
@@ -1403,6 +1426,7 @@ export class CatAgent {
     this.climb = null;
     this.fsm.restore(snap.state);
     this.pose = clonePose(computePose(this.fsm.current, this.poseContext(env, this.fsm.current)));
+    this.poseSpring.reset();
     this.tail.reset(this.x - this.facing * 30 * this.S, this.y - 20 * this.S, this.facing > 0 ? Math.PI : 0);
     this.plan = [];
     this.planLocked = false;
@@ -1432,6 +1456,7 @@ export class CatAgent {
     this.fsm.restore('IDLE_STAND');
     this.fsm.force('FALL_DESCEND');
     this.pose = makePose();
+    this.poseSpring.reset();
   }
 
   /** Forces an exact state (Studio "trigger state" buttons) via the natural chain. */

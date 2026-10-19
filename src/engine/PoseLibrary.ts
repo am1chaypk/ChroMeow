@@ -89,14 +89,14 @@ const SIT: Partial<Pose> = {
   shY: -41,
   arch: 3,
   thickTop: 13.5,
-  thickBot: 15,
+  thickBot: 14.5,
   haunch: 1.4,
   headX: 12,
   headY: -60,
   faceTurn: 0.3,
-  fnX: 10,
+  fnX: 14,
   fnY: 0,
-  ffX: 5,
+  ffX: 9,
   ffY: 0,
   hnX: 5,
   hnY: 0,
@@ -254,11 +254,16 @@ const SPRAWL: Partial<Pose> = {
 function legCycle(home: number, phase: number, stride: number, stance: number, lift: number): [number, number] {
   const lp = fract(phase);
   if (lp < stance) {
+    // Planted: the paw stays put on the ground while the body passes over it.
     const s = lp / stance;
     return [home + stride * (0.5 - s), 0];
   }
+  // Swing: the paw accelerates off the ground and decelerates into the next footfall,
+  // lifting quickly after toe-off and lowering gently onto the pads.
   const s = (lp - stance) / (1 - stance);
-  return [home + stride * (-0.5 + s), -lift * Math.sin(Math.PI * s)];
+  const sx = s * s * (3 - 2 * s);
+  const sy = Math.sin(Math.PI * Math.pow(s, 0.78));
+  return [home + stride * (-0.5 + sx), -lift * sy];
 }
 
 function applyGait(p: Pose, phase: number, g: GaitSpec, homes: [number, number, number, number]): void {
@@ -270,7 +275,9 @@ function applyGait(p: Pose, phase: number, g: GaitSpec, homes: [number, number, 
   const b = Math.sin(phase * TAU * 2) * g.bob;
   p.hipY += b * 0.8;
   p.shY += Math.sin(phase * TAU * 2 + 1.2) * g.bob * 0.8;
-  p.headY += Math.sin(phase * TAU * 2 + 1.6) * g.bob * 0.6;
+  // Cats stabilise their heads while walking: only a faint bob reaches the skull.
+  p.headY += Math.sin(phase * TAU * 2 + 1.6) * g.bob * 0.22;
+  p.headRot -= Math.sin(phase * TAU * 2 + 1.2) * g.bob * 0.006;
   p.fnCurl = clamp01(-p.fnY / Math.max(1, g.lift));
   p.ffCurl = clamp01(-p.ffY / Math.max(1, g.lift));
   p.hnCurl = clamp01(-p.hnY / Math.max(1, g.lift));

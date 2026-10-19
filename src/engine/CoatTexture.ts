@@ -112,6 +112,96 @@ function tick(ctx: AnyCtx, rect: UVRect, rng: Rng, count: number, colors: string
   ctx.restore();
 }
 
+/**
+ * Draws a marking as a band of short directional hairs along a polyline instead of a
+ * blurred brush line, so stripe edges break up into fur the way real tabby markings do.
+ * `width(f)` gives the band width at fraction f of the length; `flow` is the fur direction.
+ */
+function furStripe(
+  ctx: AnyCtx,
+  pts: Pt[],
+  width: (f: number) => number,
+  color: string,
+  rng: Rng,
+  opts: { alpha?: number; flow?: number; len?: [number, number]; density?: number; breaks?: number; core?: number } = {},
+): void {
+  if (pts.length < 2) return;
+  const alpha = opts.alpha ?? 0.85;
+  const flow = opts.flow ?? Math.PI * 0.94;
+  const len = opts.len ?? [3, 7];
+  const density = opts.density ?? 1;
+  const breaks = opts.breaks ?? 0.12;
+  const core = opts.core ?? 0.55;
+  const seg: number[] = [0];
+  for (let i = 1; i < pts.length; i++) seg.push(seg[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = seg[seg.length - 1];
+  if (total < 1) return;
+  const at = (d: number): [number, number, number] => {
+    let i = 1;
+    while (i < seg.length - 1 && seg[i] < d) i++;
+    const t = (d - seg[i - 1]) / Math.max(1e-6, seg[i] - seg[i - 1]);
+    const a = pts[i - 1];
+    const b = pts[i];
+    return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), Math.atan2(b[1] - a[1], b[0] - a[0])];
+  };
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  let gap = 0;
+  for (let d = 0; d <= total; d += 1.5) {
+    const f = d / total;
+    if (gap > 0) {
+      gap -= 1.5;
+      continue;
+    }
+    // Ends of stripes break into dashes.
+    if (rng.chance(breaks * (0.15 + f * f) * 0.12)) {
+      gap = rng.range(3, 9);
+      continue;
+    }
+    const [x, y, dir] = at(d);
+    const w = Math.max(0.6, width(f));
+    const nx = -Math.sin(dir);
+    const ny = Math.cos(dir);
+    // Solid-ish core so narrow stripes read as continuous.
+    ctx.globalAlpha = alpha * core;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w * 0.32, w * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const n = Math.max(2, Math.round(w * 0.9 * density));
+    for (let k = 0; k < n; k++) {
+      const off = (rng.next() - 0.5) * w;
+      const edge = Math.abs(off) / (w / 2);
+      const l = rng.range(len[0], len[1]) * (1 - 0.35 * edge);
+      const a = flow + rng.gauss() * 0.22;
+      const sx = x + nx * off - Math.cos(a) * l * 0.35;
+      const sy = y + ny * off - Math.sin(a) * l * 0.35;
+      ctx.globalAlpha = alpha * (1 - 0.55 * edge) * rng.range(0.6, 1);
+      ctx.lineWidth = rng.range(0.8, 1.4);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo(sx + Math.cos(a) * l * 0.5 + rng.gauss() * 0.4, sy + Math.sin(a) * l * 0.5 + rng.gauss() * 0.4, sx + Math.cos(a) * l, sy + Math.sin(a) * l);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/** Low-frequency mottling so large colour areas are never flat. */
+function mottle(ctx: AnyCtx, rect: UVRect, rng: Rng, light: string, dark: string, count: number, alpha: number): void {
+  ctx.save();
+  ctx.filter = 'blur(6px)';
+  for (let i = 0; i < count; i++) {
+    ctx.globalAlpha = alpha * rng.range(0.4, 1);
+    ctx.fillStyle = rng.chance(0.5) ? light : dark;
+    ctx.beginPath();
+    ctx.ellipse(rect.x + rng.next() * rect.w, rect.y + rng.next() * rect.h, rng.range(8, 22), rng.range(5, 14), rng.gauss() * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 /* ------------------------------------------------------------------ torso */
 
 function torsoMaskPolys(pattern: CoatPattern, m: CoatMarkings): Pt[][] {
@@ -249,50 +339,43 @@ function torsoMaskPolys(pattern: CoatPattern, m: CoatMarkings): Pt[][] {
 }
 
 function drawMackerelStripes(ctx: AnyCtx, rect: UVRect, rng: Rng, color: string, density: number, scaleY = 1): void {
-  const count = Math.round(lerp(8, 17, density));
-  ctx.save();
-  ctx.filter = 'blur(1.3px)';
-  ctx.strokeStyle = color;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  const count = Math.round(lerp(8, 14, density));
+  // Dorsal line: a dark, hairy band down the spine that the stripes hang from.
+  const dorsal: Pt[] = [];
+  for (let s = 0; s <= 24; s++) dorsal.push([rect.x + (s / 24) * rect.w, rect.y + rect.h * (0.035 + Math.sin(s * 0.9) * 0.006)]);
+  furStripe(ctx, dorsal, () => rect.h * 0.075, color, rng, { alpha: 0.78, flow: Math.PI, len: [4, 8], density: 1.2, breaks: 0 });
   for (let k = 0; k < count; k++) {
-    const u0 = (k + 0.5 + rng.gauss() * 0.18) / count;
-    const slant = rng.range(-0.035, 0.015);
-    const depth = rng.range(0.55, 0.88) * scaleY;
+    const u0 = (k + 0.5 + rng.gauss() * 0.16) / count;
+    // Mackerel stripes run down the flank, bowing gently toward the rump.
+    const slant = rng.range(-0.05, -0.012);
+    const depth = rng.range(0.52, 0.86) * scaleY;
+    const phase = rng.next() * 6;
+    const wobble = rng.range(0.004, 0.01);
     const pts: Pt[] = [];
-    for (let s = 0; s <= 6; s++) {
-      const v = (s / 6) * depth;
-      pts.push([(u0 + slant * v * 4 + Math.sin(v * 9 + k) * 0.006) * rect.w + rect.x, v * rect.h + rect.y]);
+    for (let s = 0; s <= 14; s++) {
+      const v = 0.04 + (s / 14) * depth;
+      pts.push([(u0 + slant * v * 2.2 + Math.sin(v * 8 + phase) * wobble) * rect.w + rect.x, v * rect.h + rect.y]);
     }
-    for (let s = 0; s < pts.length - 1; s++) {
-      ctx.globalAlpha = 0.62 * (1 - s / 9);
-      ctx.lineWidth = lerp(9, 3.5, s / 6) * rng.range(0.75, 1.15);
-      ctx.beginPath();
-      ctx.moveTo(pts[s][0], pts[s][1]);
-      ctx.lineTo(pts[s + 1][0], pts[s + 1][1]);
-      ctx.stroke();
-    }
-    // occasional broken branch
-    if (rng.chance(0.35)) {
-      const v = rng.range(0.25, 0.5) * depth;
-      const x = (u0 + slant * v * 4) * rect.w + rect.x;
-      const y = v * rect.h + rect.y;
-      ctx.globalAlpha = 0.6;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + rng.range(-10, 10), y + rng.range(10, 22));
-      ctx.stroke();
+    const wBase = rng.range(10, 15);
+    furStripe(ctx, pts, (f) => lerp(wBase, 4, f) * (1 - 0.3 * Math.sin(f * 9 + phase) ** 2), color, rng, {
+      alpha: 0.8,
+      flow: Math.PI * 0.93,
+      len: [4, 9],
+      breaks: 0.8,
+      core: 0.45,
+    });
+    // Occasional forked or broken spur, as on real mackerel coats.
+    if (rng.chance(0.3)) {
+      const i0 = 3 + Math.floor(rng.next() * 6);
+      const [bx, by] = pts[i0];
+      const spur: Pt[] = [
+        [bx, by],
+        [bx + rng.range(-9, -3), by + rng.range(8, 14)],
+        [bx + rng.range(-14, -6), by + rng.range(16, 26)],
+      ];
+      furStripe(ctx, spur, (f) => lerp(6, 2.5, f), color, rng, { alpha: 0.7, breaks: 1.2 });
     }
   }
-  // Dark dorsal line along the spine.
-  const g = ctx.createLinearGradient(0, rect.y, 0, rect.y + rect.h * 0.12);
-  g.addColorStop(0, rgba(color, 0.85));
-  g.addColorStop(1, rgba(color, 0));
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = g;
-  ctx.fillRect(rect.x, rect.y, rect.w, rect.h * 0.12);
-  ctx.restore();
 }
 
 function drawClassicSwirl(ctx: AnyCtx, rect: UVRect, rng: Rng, color: string): void {
@@ -410,6 +493,7 @@ function paintTorso(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
   } else {
     // agouti ticking: light tips & dark bands
     tick(lc, local, rng, tabby ? 3600 : 1800, [shadeHex(pal.tabbyBase, 0.16), shadeHex(pal.tabbyBase, -0.14), mixHex(pal.tabbyBase, pal.rufus, 0.45), pal.tabbyStripe], tabby ? 0.55 : 0.3, [4, 10], Math.PI * 0.96, 0.22, 1.2);
+    mottle(lc, local, rng, shadeHex(pal.tabbyBase, 0.12), shadeHex(pal.tabbyBase, -0.12), 26, 0.35);
     // rufous warmth low on the flanks
     if (tabby) {
       const g = lc.createLinearGradient(0, R.h * 0.35, 0, R.h * 0.85);
@@ -590,60 +674,71 @@ function paintHead(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
   const stripe = pal.tabbyStripe;
   if (tabby && stripeStyle(pattern) !== 'none') {
     const ghost = stripeStyle(pattern) === 'ghost' ? 0.25 : 1;
-    ctx.strokeStyle = stripe;
-    ctx.lineCap = 'round';
-    // forehead stripes running up to the crown
+    const quad = (x0: number, y0: number, cx1: number, cy1: number, x1: number, y1: number, n = 10): Pt[] => {
+      const out: Pt[] = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const mt = 1 - t;
+        out.push([mt * mt * x0 + 2 * mt * t * cx1 + t * t * x1, mt * mt * y0 + 2 * mt * t * cy1 + t * t * y1]);
+      }
+      return out;
+    };
+    // forehead stripes running up over the crown (fur flows up and back)
     for (let i = -3; i <= 3; i++) {
-      ctx.globalAlpha = 0.75 * ghost;
-      ctx.lineWidth = i === 0 ? 3.2 : 2.6;
-      ctx.beginPath();
       const x0 = cx + i * 7.5;
-      ctx.moveTo(x0, R.y + 62 - Math.abs(i) * 2);
-      ctx.quadraticCurveTo(x0 + i * 2.5, R.y + 36, x0 + i * 5, R.y + 6);
-      ctx.stroke();
+      const w0 = i === 0 ? 3.4 : 2.8;
+      furStripe(ctx, quad(x0, R.y + 62 - Math.abs(i) * 2, x0 + i * 2.5, R.y + 36, x0 + i * 5, R.y + 4), (f) => lerp(w0, w0 * 1.25, f), stripe, rng, {
+        alpha: 0.8 * ghost,
+        flow: -Math.PI / 2 + i * 0.08,
+        len: [2.5, 5],
+        breaks: 0.5,
+      });
     }
     // the "M"
     if (m.mMark) {
-      ctx.globalAlpha = 0.9 * ghost;
-      ctx.lineWidth = 3.4;
-      ctx.beginPath();
-      ctx.moveTo(cx - 26, R.y + 74);
-      ctx.lineTo(cx - 16, R.y + 54);
-      ctx.lineTo(cx - 6, R.y + 70);
-      ctx.lineTo(cx, R.y + 58);
-      ctx.lineTo(cx + 6, R.y + 70);
-      ctx.lineTo(cx + 16, R.y + 54);
-      ctx.lineTo(cx + 26, R.y + 74);
-      ctx.stroke();
+      const M: Pt[] = [
+        [cx - 26, R.y + 74],
+        [cx - 16, R.y + 54],
+        [cx - 6, R.y + 70],
+        [cx, R.y + 58],
+        [cx + 6, R.y + 70],
+        [cx + 16, R.y + 54],
+        [cx + 26, R.y + 74],
+      ];
+      furStripe(ctx, M, () => 3.4, stripe, rng, { alpha: 0.92 * ghost, flow: -Math.PI / 2, len: [2.5, 4.5], breaks: 0, core: 0.75 });
     }
-    // cheek stripes
+    // cheek stripes sweeping back from the eyes (fur flows outward)
     if (m.cheekStripes > 0.02) {
       for (const sx of [-1, 1]) {
-        ctx.globalAlpha = 0.85 * m.cheekStripes * ghost;
-        ctx.lineWidth = 3.6;
-        ctx.beginPath();
-        ctx.moveTo(cx + sx * (T.eyeDX + 14), ey + 14);
-        ctx.quadraticCurveTo(cx + sx * (T.eyeDX + 30), ey + 18, cx + sx * (T.eyeDX + 46), ey + 8);
-        ctx.stroke();
-        ctx.lineWidth = 2.8;
-        ctx.beginPath();
-        ctx.moveTo(cx + sx * (T.eyeDX + 10), ey + 30);
-        ctx.quadraticCurveTo(cx + sx * (T.eyeDX + 28), ey + 34, cx + sx * (T.eyeDX + 44), ey + 26);
-        ctx.stroke();
+        const flow = sx > 0 ? 0.15 : Math.PI - 0.15;
+        furStripe(ctx, quad(cx + sx * (T.eyeDX + 14), ey + 14, cx + sx * (T.eyeDX + 30), ey + 18, cx + sx * (T.eyeDX + 46), ey + 8), (f) => lerp(4, 2.6, f), stripe, rng, {
+          alpha: 0.88 * m.cheekStripes * ghost,
+          flow,
+          len: [2.5, 5],
+          breaks: 0.4,
+        });
+        furStripe(ctx, quad(cx + sx * (T.eyeDX + 10), ey + 30, cx + sx * (T.eyeDX + 28), ey + 34, cx + sx * (T.eyeDX + 44), ey + 26), (f) => lerp(3.2, 2, f), stripe, rng, {
+          alpha: 0.8 * m.cheekStripes * ghost,
+          flow,
+          len: [2.5, 5],
+          breaks: 0.6,
+        });
       }
     }
   }
   // Cleopatra eyeliner sweeping toward the temples
   if (m.eyeliner > 0.02 && pattern !== 'COLORPOINT') {
-    ctx.strokeStyle = stripe;
-    ctx.lineCap = 'round';
     for (const sx of [-1, 1]) {
-      ctx.globalAlpha = 0.95 * m.eyeliner;
-      ctx.lineWidth = 3.4;
-      ctx.beginPath();
-      ctx.moveTo(cx + sx * (T.eyeDX + 12), ey + 1);
-      ctx.quadraticCurveTo(cx + sx * (T.eyeDX + 24), ey + 2, cx + sx * (T.eyeDX + 36), ey - 7);
-      ctx.stroke();
+      const pts: Pt[] = [];
+      for (let i = 0; i <= 10; i++) {
+        const t = i / 10;
+        const mt = 1 - t;
+        const x0 = cx + sx * (T.eyeDX + 11);
+        const x1 = cx + sx * (T.eyeDX + 24);
+        const x2 = cx + sx * (T.eyeDX + 37);
+        pts.push([mt * mt * x0 + 2 * mt * t * x1 + t * t * x2, mt * mt * (ey + 1) + 2 * mt * t * (ey + 2) + t * t * (ey - 8)]);
+      }
+      furStripe(ctx, pts, (f) => lerp(3.6, 1.2, f), stripe, rng, { alpha: 0.95 * m.eyeliner, flow: sx > 0 ? -0.2 : Math.PI + 0.2, len: [2, 4], breaks: 0, core: 0.9 });
     }
   }
   ctx.globalAlpha = 1;
@@ -738,18 +833,12 @@ function paintLegs(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
     if (pattern !== 'CALICO') {
       tick(ctx, R, rng, 260, [shadeHex(top, 0.14), shadeHex(top, -0.12)], 0.5, [3, 7], Math.PI / 2, 0.3, 1);
       if (stripeStyle(pattern) === 'mackerel' || stripeStyle(pattern) === 'classic' || stripeStyle(pattern) === 'spots') {
-        ctx.save();
-        ctx.strokeStyle = pal.tabbyStripe;
-        ctx.globalAlpha = 0.7;
-        ctx.lineWidth = 5;
         for (let k = 0; k < 4; k++) {
-          const y = R.y + 30 + k * 46 + rng.gauss() * 4;
-          ctx.beginPath();
-          ctx.moveTo(R.x, y);
-          ctx.quadraticCurveTo(R.x + R.w / 2, y + 6, R.x + R.w, y);
-          ctx.stroke();
+          const y = R.y + 30 + k * 44 + rng.gauss() * 4;
+          const bar: Pt[] = [];
+          for (let s = 0; s <= 8; s++) bar.push([R.x + (s / 8) * R.w, y + Math.sin((s / 8) * Math.PI) * 6 + rng.gauss() * 0.6]);
+          furStripe(ctx, bar, (f) => lerp(5.5, 3.5, Math.abs(f - 0.5) * 2), pal.tabbyStripe, rng, { alpha: 0.72, flow: Math.PI / 2, len: [3, 6], breaks: 0.6 });
         }
-        ctx.restore();
       }
       if (pattern === 'TORTOISESHELL') paintTortie(ctx, R, rng, pal);
     }
@@ -782,21 +871,13 @@ function paintTail(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
   if (pattern === 'TORTOISESHELL') paintTortie(ctx, R, rng, pal);
   const rings = Math.round(clamp(m.tailRings, 0, 8));
   if (rings > 0 && pattern !== 'COLORPOINT' && pattern !== 'SOLID') {
-    ctx.save();
-    ctx.fillStyle = pal.tabbyStripe;
     for (let k = 0; k < rings; k++) {
       const u = lerp(0.22, 0.86, rings === 1 ? 0.5 : k / (rings - 1));
-      const w = lerp(16, 26, k / Math.max(1, rings - 1));
-      ctx.globalAlpha = 0.88;
-      ctx.beginPath();
-      ctx.moveTo(R.x + u * R.w - w / 2, R.y);
-      ctx.quadraticCurveTo(R.x + u * R.w - w / 2 + 6, R.y + R.h / 2, R.x + u * R.w - w / 2, R.y + R.h);
-      ctx.lineTo(R.x + u * R.w + w / 2, R.y + R.h);
-      ctx.quadraticCurveTo(R.x + u * R.w + w / 2 + 6, R.y + R.h / 2, R.x + u * R.w + w / 2, R.y);
-      ctx.closePath();
-      ctx.fill();
+      const w = lerp(15, 24, k / Math.max(1, rings - 1));
+      const ring: Pt[] = [];
+      for (let s = 0; s <= 8; s++) ring.push([R.x + u * R.w + Math.sin((s / 8) * Math.PI) * 5, R.y - 2 + (s / 8) * (R.h + 4)]);
+      furStripe(ctx, ring, (f) => w * (0.82 + 0.18 * Math.sin(f * Math.PI)), pal.tabbyStripe, rng, { alpha: 0.9, flow: 0, len: [4, 8], density: 1.1, breaks: 0, core: 0.8 });
     }
-    ctx.restore();
   }
   if (m.tailTipDark || pattern === 'COLORPOINT') {
     const g = ctx.createLinearGradient(R.x + R.w * 0.86, 0, R.x + R.w * 0.93, 0);
