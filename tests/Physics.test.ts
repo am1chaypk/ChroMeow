@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRAVITY, MAX_JUMP_UP, buildPlatforms, findLanding, isScrollViolent, makeFloor, mergePlatforms, solveJump, trajectoryAt, type Platform } from '../src/engine/Physics';
+import { GRAVITY, MAX_JUMP_UP, MAX_THROW_DOWN, MAX_THROW_UP, MAX_THROW_VX, PENDULUM_MAX_ANGLE, buildPlatforms, clampThrow, fallStep, findLanding, isScrollViolent, makeFloor, mergePlatforms, pendulumStep, pendulumTarget, solveJump, trajectoryAt, type Platform } from '../src/engine/Physics';
 import { planHop, planRoute } from '../src/engine/Navigator';
 
 const bounds = { width: 1200, height: 800 };
@@ -128,5 +128,70 @@ describe('navigation across ledges', () => {
     const plan = planRoute(all, 'low', 150, 'low', 350, bounds)!;
     expect(plan.hops).toHaveLength(0);
     expect(plan.finalX).toBeCloseTo(350, 6);
+  });
+});
+
+describe('scruff pendulum & throw', () => {
+  it('swings the body away from the hand’s motion, clamped to ±0.65 rad', () => {
+    expect(pendulumTarget(10)).toBeCloseTo(-0.45, 6); // hand moving right → body trails to the left
+    expect(pendulumTarget(-10)).toBeCloseTo(0.45, 6);
+    expect(pendulumTarget(400)).toBe(-PENDULUM_MAX_ANGLE);
+    expect(pendulumTarget(-400)).toBe(PENDULUM_MAX_ANGLE);
+    const s = { angle: 0, angVel: 0 };
+    let min = 0;
+    for (let i = 0; i < 120; i++) {
+      pendulumStep(s, 60, 1 / 60);
+      min = Math.min(min, s.angle);
+      expect(Math.abs(s.angle)).toBeLessThanOrEqual(PENDULUM_MAX_ANGLE + 1e-9);
+    }
+    expect(min).toBeLessThan(-0.5);
+  });
+
+  it('sways a little and settles vertically once the hand stops', () => {
+    const s = { angle: 0, angVel: 0 };
+    for (let i = 0; i < 30; i++) pendulumStep(s, 8, 1 / 60);
+    const swung = s.angle;
+    expect(swung).toBeLessThan(-0.2);
+    let crossed = false;
+    for (let i = 0; i < 180; i++) {
+      pendulumStep(s, 0, 1 / 60);
+      if (s.angle > 0.005) crossed = true; // a natural overshoot past vertical
+    }
+    expect(crossed).toBe(true);
+    expect(Math.abs(s.angle)).toBeLessThan(0.01);
+    expect(Math.abs(s.angVel)).toBeLessThan(0.05);
+  });
+
+  it('stays stable at low frame rates', () => {
+    const s = { angle: 0.6, angVel: 3 };
+    for (let i = 0; i < 40; i++) pendulumStep(s, 0, 1 / 8);
+    expect(Math.abs(s.angle)).toBeLessThan(0.01);
+  });
+
+  it('caps throw speeds and ignores garbage input', () => {
+    expect(clampThrow(5000, -5000)).toEqual({ vx: MAX_THROW_VX, vy: -MAX_THROW_UP });
+    expect(clampThrow(-5000, 9000)).toEqual({ vx: -MAX_THROW_VX, vy: MAX_THROW_DOWN });
+    expect(clampThrow(Number.NaN, Number.POSITIVE_INFINITY)).toEqual({ vx: 0, vy: 0 });
+    expect(clampThrow(300, -200)).toEqual({ vx: 300, vy: -200 });
+  });
+
+  it('a released cat falls under gravity and lands on the first ledge below it', () => {
+    const shelf = ledge('shelf', 300, 700, 500);
+    const plats = [shelf, makeFloor(bounds)];
+    let x = 420;
+    let y = 260;
+    let vx = 240;
+    let vy = -180; // tossed up and to the right
+    let landed: Platform | null = null;
+    for (let i = 0; i < 400 && !landed; i++) {
+      const prevY = y;
+      const st = fallStep(y, vy, 1 / 60);
+      y = st.y;
+      vy = st.vy;
+      x += vx / 60;
+      landed = vy > 0 ? findLanding(prevY, y, x, plats) : null;
+    }
+    expect(landed?.id).toBe('shelf');
+    expect(x).toBeGreaterThan(420);
   });
 });

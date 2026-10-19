@@ -316,6 +316,116 @@ input {
   text-align: center;
 }
 
+/* --- food & water ------------------------------------------------------- */
+.station {
+  margin: 10px 0 0;
+  padding: 8px 14px 10px;
+  background: var(--surface);
+  border-block: 1px solid var(--line);
+}
+
+.station__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.station__title {
+  margin: 0;
+  font: 650 13.5px/1.2 var(--round);
+}
+
+.station.is-off .bowl,
+.station.is-off .station__hint {
+  opacity: 0.45;
+}
+
+.bowl {
+  display: grid;
+  grid-template-columns: 44px 1fr 36px auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.bowl + .bowl {
+  margin-top: 6px;
+}
+
+.bowl__label {
+  color: var(--ink-2);
+}
+
+.bowl__track {
+  display: block;
+  height: 7px;
+  border-radius: 4px;
+  background: #e7ebee;
+  overflow: hidden;
+}
+
+.bowl__fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.bowl--food .bowl__fill {
+  background: linear-gradient(90deg, #b5603f, #d2805c);
+}
+
+.bowl--water .bowl__fill {
+  background: linear-gradient(90deg, #4a79a3, #6c9cc4);
+}
+
+.bowl.is-empty .bowl__pct {
+  color: var(--bean-ink);
+  font-weight: 650;
+}
+
+.bowl__pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  text-align: end;
+}
+
+.bowl__btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bowl__btn:hover:not(:disabled) {
+  border-color: var(--bean);
+}
+
+.bowl__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.station__hint {
+  margin: 7px 0 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.select {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+}
+
 /* --- settings rows ------------------------------------------------------ */
 .rows {
   margin-top: 8px;

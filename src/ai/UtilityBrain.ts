@@ -8,10 +8,15 @@
  * narrow ledges, time of day …), where the weights w_i come from the cat's
  * immutable personality. ε is small seeded noise. Hysteresis — a commitment
  * bonus for the current intent plus a switching margin — prevents jitter.
+ *
+ * Hunger and thirst trump everything else once they pass their thresholds (and
+ * the bowl has something in it); with an empty bowl a very hungry or thirsty
+ * cat goes and asks for a refill instead.
  */
 import { clamp01, smoothstep } from '../shared/math';
 import { Rng } from '../shared/rng';
-import type { Drives, Personality, SignatureBehaviors, ToyKind } from '../shared/types';
+import type { CatTraits, Drives, Personality, SignatureBehaviors, ToyKind } from '../shared/types';
+import { BEG_LEVEL, HUNGER_SEEK, THIRST_SEEK } from './Drives';
 
 export const INTENTS = [
   'sleep',
@@ -28,6 +33,8 @@ export const INTENTS = [
   'treat',
   'climb',
   'peek',
+  'eat',
+  'drink',
 ] as const;
 export type IntentKind = (typeof INTENTS)[number];
 
@@ -60,7 +67,14 @@ export interface BrainContext {
   calm: boolean;
   /** Already being petted. */
   petted: boolean;
+  /** Individual quirks (appetite, play, social initiative). Optional for older callers. */
+  traits?: Partial<CatTraits>;
+  /** The food & water station, if it is out. Levels are 0..100. */
+  station?: { exists: boolean; food: number; water: number; dist: number; begReady: boolean };
 }
+
+/** A bowl with this much or less counts as empty. */
+export const EMPTY_BOWL = 5;
 
 export interface Decision {
   intent: IntentKind;
@@ -84,18 +98,38 @@ export const MIN_COMMIT: Record<IntentKind, number> = {
   treat: 3,
   climb: 6,
   peek: 6,
+  eat: 8,
+  drink: 8,
 };
 
 const COMMIT_BONUS = 0.28;
 const STICKY_BONUS = 0.1;
 const SWITCH_MARGIN = 0.08;
 const NOISE = 0.07;
+/** Scores saturate here (meals above their threshold sit near the top of the range). */
+const SCORE_CAP = 3.5;
 
 function sleepiness(hour: number): number {
   // Night + post-lunch dip.
   const night = hour >= 23 || hour < 6 ? 1 : hour >= 21 ? 0.5 : 0;
   const siesta = hour >= 13 && hour < 16 ? 0.4 : 0;
   return Math.max(night, siesta);
+}
+
+/**
+ * Score for heading to a bowl: dominant above the seek threshold when there is
+ * food / water to have; a strong "ask for a refill" urge when very hungry or
+ * thirsty in front of an empty bowl (unless the cat recently gave up asking);
+ * a mild urge to snack before the threshold.
+ */
+export function mealScore(need: number, level: number, seek: number, begReady: boolean): number {
+  const n = need / 100;
+  if (level > EMPTY_BOWL) {
+    if (need > seek) return 2.6 + 1.5 * (n - seek / 100);
+    return 0.7 * smoothstep(seek - 20, seek, need);
+  }
+  if (need > BEG_LEVEL && begReady) return 2.05 + 2 * (n - BEG_LEVEL / 100);
+  return 0;
 }
 
 /** Pure scoring function (exported for tests). */
@@ -127,7 +161,11 @@ export function scoreIntents(c: BrainContext): Record<IntentKind, number> {
     treat: 0,
     climb: 0,
     peek: 0,
+    eat: 0,
+    drink: 0,
   };
+  const tr = c.traits ?? {};
+  const initiative = tr.socialInitiative ?? 0.5;
 
   s.sleep = 0.55 * p.laziness + 1.25 * Math.pow(tired, 1.4) + 0.3 * sleepiness(c.hour) + (c.warmSpot ? 0.18 * p.laziness : 0) + ((c.signature.meltedLoafSleep && c.narrowLedge) || (c.signature.chinPropSleep && c.edgeSpot) ? 0.1 : 0) - 0.5 * play - 0.3 * irritated - 0.25;
   s.rest = 0.3 + 0.35 * p.laziness + 0.4 * tired - 0.2 * curious + 0.1 * calm;
@@ -138,11 +176,16 @@ export function scoreIntents(c: BrainContext): Record<IntentKind, number> {
   s.gaze = 0.75 * cursorNear * (0.4 + 0.6 * curious) + 0.15 * cursorMoving;
   s.hunt = cursorNear > 0.05 ? (1.1 * p.huntDrive * play + 0.25 * energy) * c.cursor.erratic * (0.4 + 0.6 * cursorNear) * (1 - 0.5 * calm) : 0;
   s.keyboard = c.typing.active ? 0.55 + 0.6 * curious + 0.15 * (1 - smoothstep(200, 900, c.typing.dist)) : 0;
-  s.social = c.partner.exists && c.partner.available ? 1.05 * social * p.sociability + 0.15 * (c.partner.asleep ? tired : play) + (c.partner.dist < 160 ? 0.1 : 0) - 0.15 : 0;
+  s.social = c.partner.exists && c.partner.available ? 1.05 * social * p.sociability * (0.75 + 0.5 * initiative) + 0.15 * (c.partner.asleep ? tired : play) + (c.partner.dist < 160 ? 0.1 : 0) - 0.15 : 0;
   s.toy = c.toy.kind === 'ball' || c.toy.kind === 'laser' ? 0.9 + 0.7 * p.huntDrive + 0.5 * play - 0.6 * tired : 0;
   s.treat = c.toy.kind === 'treat' ? 2.2 : 0;
   s.climb = c.timeSinceClimb > 120 ? 0.32 * curious * (1 - p.laziness) * energy + 0.05 : 0;
   s.peek = c.timeSinceClimb > 60 ? 0.22 * curious * (1 - p.laziness * 0.6) : 0;
+  const st = c.station;
+  if (st?.exists) {
+    s.eat = mealScore(d.hunger, st.food, HUNGER_SEEK, st.begReady);
+    s.drink = mealScore(d.thirst, st.water, THIRST_SEEK, st.begReady);
+  }
 
   // While being petted, the cat simply wants to stay put.
   if (c.petted) {
@@ -176,7 +219,7 @@ export class UtilityBrain {
   decide(c: BrainContext): Decision {
     const raw = scoreIntents(c);
     const scores = { ...raw };
-    for (const k of INTENTS) scores[k] = clamp01(scores[k] / 2.5) * 2.5 + (this.rng.next() * 2 - 1) * NOISE;
+    for (const k of INTENTS) scores[k] = clamp01(scores[k] / SCORE_CAP) * SCORE_CAP + (this.rng.next() * 2 - 1) * NOISE;
     if (this.current) {
       const committed = this.age < MIN_COMMIT[this.current];
       scores[this.current] += committed ? COMMIT_BONUS : STICKY_BONUS;

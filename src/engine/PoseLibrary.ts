@@ -78,6 +78,9 @@ export const GAITS: Partial<Record<CatState, GaitSpec>> = {
   PLAY_TAG_CHASE: { speed: 200, stride: 36, stance: 0.42, lift: 10, offsets: [0.5, 0.6, 0, 0.1], bob: 2.4 },
   JEALOUSY_INTERVENTION: { speed: 40, stride: 20, stance: 0.62, lift: 5, offsets: [0.25, 0.75, 0, 0.5], bob: 1 },
   WALL_CLIMB: { speed: 64, stride: 20, stance: 0.55, lift: 7, offsets: [0.5, 0, 0, 0.5], bob: 0.6 },
+  // Purposeful trot to the food / water station.
+  SEEKING_FOOD: { speed: 96, stride: 27, stance: 0.54, lift: 7, offsets: [0.5, 0, 0, 0.5], bob: 1.3 },
+  SEEKING_WATER: { speed: 96, stride: 27, stance: 0.54, lift: 7, offsets: [0.5, 0, 0, 0.5], bob: 1.3 },
 };
 
 /* ------------------------------------------------------------ base poses */
@@ -517,6 +520,8 @@ export function computePose(state: CatState, c: PoseContext): Pose {
     /* ---------- locomotion ---------- */
     case 'SAUNTER_WALK':
     case 'TROT':
+    case 'SEEKING_FOOD':
+    case 'SEEKING_WATER':
     case 'JEALOUSY_INTERVENTION':
     case 'PLAY_TAG_CHASE':
     case 'ZOOMIES_SPRINT':
@@ -558,6 +563,16 @@ export function computePose(state: CatState, c: PoseContext): Pose {
         p.tailAngle = -2.55;
         p.tailCurl = 0.13;
         p.headY = -55;
+      } else if (state === 'SEEKING_FOOD' || state === 'SEEKING_WATER') {
+        // Head a little low and forward, tail up: on a mission.
+        p.headX = 36;
+        p.headY = -51;
+        p.headRot = 0.1;
+        p.earL = p.earR = 4;
+        p.pupil = 0.7;
+        p.tailAngle = -1.85;
+        p.tailCurl = 0.3;
+        p.tailStiff = 0.5;
       } else if (state === 'JEALOUSY_INTERVENTION') {
         p.tailAngle = -1.75;
         p.tailCurl = 0.32;
@@ -1081,6 +1096,131 @@ export function computePose(state: CatState, c: PoseContext): Pose {
       applyLook(p, c, 1);
       return p;
     }
+    /* ---------- v2: held, meals, idle cuddle ---------- */
+    case 'SCRUFF_HELD': {
+      // The scruff reflex: body hangs straight below the nape, slightly elongated; front
+      // legs dangle loosely, hind legs tuck up toward the belly, eyes half closed and calm.
+      // Body axis is local +x (head up after the agent rotates the rig); gravity is local −x.
+      const sway = Math.sin(t * 1.7 + c.seed * 5);
+      const p = makePose({
+        hipX: -25,
+        hipY: -36,
+        shX: 22,
+        shY: -36,
+        arch: 2.5,
+        thickTop: 12.5,
+        thickBot: 12.5,
+        haunch: 0.25,
+        headX: 38,
+        headY: -44,
+        headRot: 0.32,
+        faceTurn: 0.4,
+        eyeOpen: 0.42,
+        squint: 0.25,
+        pupil: 0.55,
+        earL: -10,
+        earR: -10,
+        // Front legs hang loosely down (toward the hips) and a little out in front of the chest.
+        fnX: -3 + sway * 1.2,
+        fnY: -13,
+        ffX: -7 + sway * 1.2,
+        ffY: -16,
+        fnCurl: 0.6,
+        ffCurl: 0.6,
+        // Hind legs tucked up and in toward the belly (the scruff reflex).
+        hnX: -14,
+        hnY: -12,
+        hfX: -18,
+        hfY: -15,
+        hnCurl: 0.8,
+        hfCurl: 0.8,
+        pads: 0.35,
+        tailAngle: Math.PI * 1.02,
+        tailCurl: -0.05,
+        tailWave: 0.04,
+        tailStiff: 0.08,
+        tailGravity: 700,
+        breath: 1.1,
+        breathRate: 0.38,
+      });
+      // Elongate the torso (stretchFactor ≈ 1.12 of the standing spine).
+      const stretch = 1.12;
+      const mid = (p.hipX + p.shX) / 2;
+      p.hipX = mid + (p.hipX - mid) * stretch;
+      p.shX = mid + (p.shX - mid) * stretch;
+      p.headX = mid + (p.headX - mid) * stretch;
+      // Hanging orientation for previews / sprite baking; the agent sets the exact angle (nape over centre of mass + swing).
+      p.rot = -1.05;
+      return p;
+    }
+    case 'EATING': {
+      // Standing over the bowl, front end lowered, muzzle in the kibble, chewing.
+      const p = makePose({ hipX: -22, hipY: -37, shX: 19, shY: -27, arch: -1, thickBot: 12.5, headX: 37, headY: -13, headRot: 0.72, faceTurn: 0.45, fnX: 23, ffX: 17, hnX: -20, hfX: -26, eyeOpen: 0.35, earL: -3, earR: 2, tailAngle: -2.15, tailCurl: 0.22, tailWave: 0.08 });
+      const bite = (1 + Math.sin(t * 9.5)) / 2;
+      const dip = Math.max(0, Math.sin(t * 1.3 + c.seed * 4)) ** 4;
+      p.mouth = bite * 0.28;
+      p.headY += bite * 1.1 - dip * 2;
+      p.headRot += Math.sin(t * 4.7) * 0.05;
+      return p;
+    }
+    case 'DRINKING': {
+      // Crouched low with elbows out, head level just above the water, tongue lapping fast.
+      const p = makePose({ hipX: -21, hipY: -26, shX: 18, shY: -20, arch: -2, thickBot: 11, haunch: 0.9, headX: 35, headY: -11, headRot: 0.42, faceTurn: 0.45, fnX: 22, ffX: 16, hnX: -15, hfX: -19, eyeOpen: 0.4, earL: 0, earR: 3, tailAngle: Math.PI * 0.97, tailCurl: -0.1, tailWave: 0.05 });
+      const lap = Math.max(0, Math.sin(t * TAU * 3.6));
+      p.tongue = lap;
+      p.mouth = lap * 0.25;
+      p.headY += lap * 0.8;
+      return p;
+    }
+    case 'EMPTY_BOWL_WAIT': {
+      // Sitting neatly beside the empty bowl, looking up at you, the occasional meow.
+      const p = makePose(SIT);
+      const meow = Math.max(0, Math.sin(t * 0.95 + c.seed * 3)) ** 10;
+      p.mouth = meow * 0.65;
+      p.eyeOpen = 1 - meow * 0.3;
+      p.pupil = 0.7;
+      p.earL = p.earR = 3;
+      p.headRot = Math.sin(t * 0.5 + c.seed * 7) * 0.08 - 0.06;
+      p.tailAngle = Math.PI * 0.9;
+      p.tailCurl = -0.3;
+      p.tailWhip = Math.max(0, Math.sin(t * 0.7)) ** 8 * 0.35;
+      applyLook(p, c, 1);
+      return p;
+    }
+    case 'CUDDLE_SLEEP': {
+      // Pressed together: role 0 curls up; role 1 lies alongside with its chin and one
+      // front paw draped over the partner's shoulders. Breathing is shared (same rate).
+      if (c.role === 0) {
+        const p = makePose(CURL);
+        p.headRot = 0.4;
+        p.breath = 1.5;
+        p.breathRate = 0.26;
+        return p;
+      }
+      const p = makePose(LOAF);
+      p.thickTop = 13;
+      p.thickBot = 7.5;
+      p.hipX = -24;
+      p.shX = 15;
+      const top = Number.isFinite(c.partnerTopY) ? c.partnerTopY : -24;
+      const reach = Number.isFinite(c.partnerDX) ? clamp(c.partnerDX * 0.55, 26, 46) : 36;
+      p.headX = reach + 2;
+      p.headY = clamp(top - 5, -42, -12);
+      p.headRot = 0.36;
+      p.faceTurn = 0.22;
+      p.eyeOpen = 0;
+      p.earL = p.earR = -6;
+      p.frontHidden = 0;
+      p.fnX = reach + 8;
+      p.fnY = clamp(top + 1, -34, -6);
+      p.fnCurl = 0.55;
+      p.ffX = 18;
+      p.ffY = -3;
+      p.ffCurl = 0.3;
+      p.breath = 1.5;
+      p.breathRate = 0.26;
+      return p;
+    }
     default: {
       const _exhaustive: never = state;
       return makePose(_exhaustive);
@@ -1104,6 +1244,7 @@ export function canLook(state: CatState): boolean {
     case 'JUDGMENTAL_AIRPLANE_SQUINT':
     case 'LEDGE_CHIN_REST':
     case 'STALK_CURSOR':
+    case 'EMPTY_BOWL_WAIT':
       return true;
     default:
       return false;

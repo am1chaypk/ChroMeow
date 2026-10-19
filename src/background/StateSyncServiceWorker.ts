@@ -4,10 +4,13 @@
  *  • Keeps the live world snapshot (state, mood drives, relative positions) in
  *    memory and mirrored to chrome.storage.session, so the next tab you focus
  *    hydrates both cats in their exact current state.
- *  • Seeds factory presets on install, handles the Alt+Shift+C click-through
- *    shortcut, and opens Cat Studio. Makes zero network requests.
+ *  • Seeds factory presets on install (and migrates v1 data to Alex & Anna),
+ *    handles the Alt+Shift+C click-through shortcut, and opens Cat Studio.
+ *  • Watches chrome.idle (the whole computer going idle or locking) and tells
+ *    every tab, so the cats can cuddle up while you are away.
+ * Makes zero network requests.
  */
-import { isRuntimeMessage, type HydrateResponse, type RuntimeMessage } from '../shared/messages';
+import { isRuntimeMessage, type HydrateResponse, type IdleBroadcast, type RuntimeMessage } from '../shared/messages';
 import { ensureDefaults, loadSettings, patchSettings, readWorldSession, writeWorldSession } from '../shared/storage';
 import type { WorldSnapshot } from '../shared/types';
 
@@ -38,12 +41,36 @@ async function refreshBadge(): Promise<void> {
   }
 }
 
+/** chrome.idle reports after `idleThreshold` seconds without input anywhere (minimum 15 s). */
+async function configureIdle(): Promise<void> {
+  try {
+    if (!chrome.idle) return;
+    const s = await loadSettings();
+    chrome.idle.setDetectionInterval(Math.max(15, Math.round(s.idleThreshold)));
+  } catch {
+    /* idle API unavailable */
+  }
+}
+
+async function broadcastIdle(state: chrome.idle.IdleState): Promise<void> {
+  const msg: IdleBroadcast = { type: 'cm:idleState', state };
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const t of tabs) if (typeof t.id === 'number') void chrome.tabs.sendMessage(t.id, msg).catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
+}
+
+if (chrome.idle?.onStateChanged) chrome.idle.onStateChanged.addListener((state) => void broadcastIdle(state));
+void configureIdle();
+
 chrome.runtime.onInstalled.addListener(() => {
-  void ensureDefaults().then(refreshBadge);
+  void ensureDefaults().then(refreshBadge).then(configureIdle);
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void ensureDefaults().then(refreshBadge);
+  void ensureDefaults().then(refreshBadge).then(configureIdle);
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -102,5 +129,8 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['chromeow:settings']) void refreshBadge();
+  if (area === 'local' && changes['chromeow:settings']) {
+    void refreshBadge();
+    void configureIdle();
+  }
 });

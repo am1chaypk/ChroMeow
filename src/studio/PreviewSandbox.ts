@@ -36,6 +36,8 @@ export class PreviewSandbox {
   selectedId: string | null = null;
   /** Left-click toy in hand (treat / laser / ball), or null for petting. */
   readonly tool: ToyTool;
+  /** Dragging the food & water mat (pointer x offset from the station centre). */
+  private matDrag: number | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement, settings: Settings = DEFAULT_SETTINGS) {
     this.ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
@@ -47,6 +49,12 @@ export class PreviewSandbox {
     this.tool = new ToyTool(() => this.world);
     canvas.addEventListener('pointermove', (e) => {
       const p = this.local(e);
+      if (this.matDrag !== null) {
+        this.world.station.moveTo((p.x - this.matDrag) / this.w);
+        return;
+      }
+      const over = this.tool.active ? null : this.world.stationHit(p.x, p.y);
+      canvas.style.cursor = this.world.held ? 'grabbing' : over === 'mat' ? 'grab' : over ? 'pointer' : '';
       this.world.pointerMove(p.x, p.y, performance.now() / 1000);
       if (this.tool.holding) this.tool.move(p.x, p.y, e.timeStamp / 1000);
     });
@@ -60,7 +68,17 @@ export class PreviewSandbox {
         this.tool.down(p.x, p.y, e.timeStamp / 1000);
         return;
       }
-      if (this.world.pointerDown(p.x, p.y)) canvas.setPointerCapture(e.pointerId);
+      if (e.button !== 0) return;
+      if (this.world.pointerDown(p.x, p.y, performance.now() / 1000)) {
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      // Bowls refill on click; the mat slides along the floor.
+      const hit = this.world.stationHit(p.x, p.y);
+      if (hit === 'mat') {
+        this.matDrag = p.x - this.world.station.centerX({ width: this.w, height: this.h });
+        canvas.setPointerCapture(e.pointerId);
+      } else if (hit) this.world.refill(hit);
     });
     canvas.addEventListener('pointerup', (e) => {
       const p = this.local(e);
@@ -68,9 +86,14 @@ export class PreviewSandbox {
         this.tool.up(p.x, p.y, e.timeStamp / 1000);
         return;
       }
+      this.matDrag = null;
       this.world.pointerUp(p.x, p.y);
     });
-    canvas.addEventListener('lostpointercapture', () => this.tool.cancel());
+    canvas.addEventListener('lostpointercapture', () => {
+      this.tool.cancel();
+      this.matDrag = null;
+      this.world.pointerCancel();
+    });
     canvas.addEventListener('pointerleave', () => this.world.pointerLeave());
   }
 

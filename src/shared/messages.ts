@@ -8,11 +8,15 @@ export type RuntimeMessage =
   | { type: 'cm:openStudio'; catId?: string }
   | { type: 'cm:ping' };
 
+/** Browser-wide idle state from chrome.idle (sent by the service worker to every tab). */
+export type IdleBroadcast = { type: 'cm:idleState'; state: 'active' | 'idle' | 'locked' };
+
 export type TabMessage =
   | { type: 'cm:action'; action: PopupAction }
   | { type: 'cm:getPageInfo' }
   | { type: 'cm:applyWorld'; world: WorldSnapshot }
-  | { type: 'cm:play'; tool: ToyKind | null };
+  | { type: 'cm:play'; tool: ToyKind | null }
+  | IdleBroadcast;
 
 export interface HydrateResponse {
   world: WorldSnapshot | null;

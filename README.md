@@ -1,6 +1,6 @@
 # ChroMeow
 
-Two cats that live on the web pages you visit. They walk along headers and cards, nap on warm video players, chase your cursor, watch you type, groom each other and complain when you pet the other one for too long. Everything runs locally in your browser: no servers, no analytics, no network requests at all.
+Alex and Anna, two cats that live on the web pages you visit. They walk along headers and cards, nap on warm video players, chase your cursor, watch you type, eat and drink from their own bowls, groom each other, curl up together when you step away, and complain when you pet the other one for too long. You can pick them up by the scruff and carry them anywhere. Everything runs locally in your browser: no servers, no analytics, no network requests at all.
 
 [עברית למטה](#chromeow-בעברית)
 
@@ -26,15 +26,16 @@ Chrome does not inject extensions into `chrome://` pages or the Chrome Web Store
 
 ## Meet the cats
 
-Two cats are enabled out of the box, both modelled on real piebald brown tabbies: white bib and belly, an inverted white "V" blaze, the tabby "M" on the forehead, dark eyeliner, a ringed tail with a dark tip and a chonk factor around 1.2.
+Alex and Anna are enabled out of the box. Both are brown-and-white mackerel tabbies modelled on real cats, with a white bib and belly, the tabby "M" on the forehead, dark eyeliner and a ringed tail with a dark tip.
 
-| | Cat 1 | Cat 2 |
+| | Alex (אלכס) | Anna (אנה) |
 |---|---|---|
-| Coat | Patched tabby harlequin: a white shoulder band breaks the saddle, golden flank patch, full white front legs, high hind stockings | Mantled bicolour tabby: one continuous tabby mantle, a small white crest on the rump, broader blaze, bold cheek stripes |
-| Signature sleep | Chin propped on a ledge (`CHIN_PROP_SLEEP`) | Melted loaf, tail dangling off the edge (`MELTED_LOAF_SLEEP`) |
-| Temperament | Lazy, very social, sassy: the judgmental airplane-ear squint is hers | Affectionate pillow snuggler, keener hunter |
+| Coat | Patched brown-grey mackerel tabby with white, warm golden-brown undertones. A white band crosses his back behind the shoulders ("broken saddle"), splitting the tabby shoulder patch from the rear saddle. A warm amber patch (#D47A34 deepening into #B86528) sits low on his flank where the tabby meets the white belly. Wide, slightly lopsided white blaze over the muzzle and cheeks, bubblegum-pink nose, white legs | Classic cool brown/charcoal mackerel tabby with white: crisp #1E1D1B stripes over a cool #6A5D4D ticked coat, one continuous mantle from crown to tail base (no white band, no orange patch). Narrow symmetrical blaze, delicate pink nose, sharp eyeliner, white bib, belly and socks |
+| Build | A little stockier and bigger (size 1.06) | Lighter (size 0.98) |
+| Temperament | Relaxed and affectionate. Loves to sprawl and stretch his front paws out, gets hungry a bit faster, adores head, chin and back rubs, devoted to Anna | Alert, agile cursor hunter with expressive "airplane ears" when annoyed or overstimulated. Often starts grooming sessions and cuddles with Alex |
+| Signature sleep | Chin propped on a ledge (`CHIN_PROP_SLEEP`) | Melted loaf on a narrow ledge (`MELTED_LOAF_SLEEP`), or using Alex as a pillow |
 
-Rename them in the popup or the Cat Studio (Hebrew names work). You can run up to six cats, and switch any of them off or remove them.
+Rename them in the popup or the Cat Studio (their names show as אלכס and אנה in Hebrew). You can run up to six cats, and switch any of them off or remove them. If you used ChroMeow 1.x, your factory "Cat 1" and "Cat 2" become Alex and Anna on update; any name, colours, paint or photos you changed are kept.
 
 ## Using it
 
@@ -43,6 +44,8 @@ Rename them in the popup or the Cat Studio (Hebrew names work). You can run up t
 - Pick up a toy, **Treats**, **Laser pointer** or **Toy ball**, and play on the page with the left mouse button (see below), or **Call cats** to the middle of the window
 - **Click-through lock**: cats stop catching the mouse so you can click whatever is under them. Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>
 - **Pause on this site** (remembered per domain) or **Pause everywhere**
+- **Food & water**: how full each bowl is, **Refill food 🍖** and **Refill water 💧**, and a switch to show or hide the station
+- **Cuddle up when I'm away**: how long without mouse or keyboard input before the cats curl up together (30 seconds to 30 minutes, 2 minutes by default)
 - Sound and volume, cat size, name tags and calm mode
 - **Open Cat Studio**
 
@@ -57,7 +60,13 @@ Rename them in the popup or the Cat Studio (Hebrew names work). You can run up t
 | Belly | A roll onto the back. Depending on mood (and sass) she either enjoys it or answers with bunny kicks and a swat |
 | Tail | Tail lashing and airplane ears, or Cat 1's judgmental squint if you woke her |
 
-Click a cat to poke it. Pet one cat for more than about eight seconds and the other may walk over and push in.
+Petting for a long time eventually overstimulates a cat (Anna's ears flatten much sooner than Alex's). Click a cat to poke it. Pet one cat for more than about eight seconds and the other may walk over and push in.
+
+**Picking a cat up.** Press on a cat and drag (more than 5 px), or press right on the scruff behind the ears, to lift it by the scruff. The cat goes calm, half-closes its eyes and hangs below your pointer: front paws dangle, hind legs tuck in, the tail droops, and the body swings with your hand and settles when you hold still. While you hold a cat, the overlay keeps the pointer however fast you move, so you never select text by accident. Let go to drop it or flick to throw it. It falls, lands on the ledge or floor below, and licks a paw to smooth its fur. Leaving the window or a cancelled pointer sets it down gently.
+
+**Food and water.** A mat with a food bowl and a water bowl sits on the bottom of the window (on the right by default). Hunger and thirst build over time, faster with zoomies, pouncing and play. A hungry or thirsty cat walks over, eats or drinks with its head in the bowl (the bowl empties a little), and then sits down for a quick face wash. If the bowl is empty, a very hungry cat sits beside it, looks up at you and meows, with a fish or water-drop thought bubble. Click a bowl to refill it, or drag the mat to move the station. Bowl levels are shared by all tabs.
+
+**When you step away.** After the idle delay with no mouse or keyboard input (or when the computer goes idle or locks), Alex and Anna walk to each other, trade a quick lick and fall asleep pressed together, Anna draped over Alex, breathing in sync. While they sleep, the page scanner slows down to save battery. Move the mouse or press a key and they wake slowly: a long blink, a stretch, a yawn, then Alex trots over to your pointer with his tail up like a question mark, purring.
 
 **Playing with toys.** After you pick a toy, a small toolbar appears at the top of the page and the left mouse button plays instead of clicking links:
 
@@ -69,11 +78,11 @@ Click a cat to poke it. Pet one cat for more than about eight seconds and the ot
 
 Switch toys from the toolbar. Press <kbd>Esc</kbd>, right-click or choose **Done** to put the toy away. Scrolling still works while you play. The same toys work in the Cat Studio's live preview.
 
-**On their own** the cats sleep through full rest chains (curled sleep, sprawl, arch stretch, big yawn, sit), groom, explore, perch on page elements, track and stalk the cursor, pounce on erratic movement, sit near the caret while you type, peek over screen edges, climb the sides of the window, boop noses, groom each other, play tag and wrestle, and sleep together in a yin-yang curl, a pillow stack or a tandem belly hold. Scroll violently and a cat on a page element gets thrown off and lands on its feet.
+**On their own** the cats sleep through full rest chains (curled sleep, sprawl, arch stretch, big yawn, sit), groom, explore, perch on page elements, track and stalk the cursor, pounce on erratic movement, sit near the caret while you type, peek over screen edges, climb the sides of the window, boop noses, groom each other, play tag and wrestle, and sleep together in a yin-yang curl, a pillow stack or a tandem belly hold. A cat on a page element moves with it as you scroll. When the element scrolls off the top of the window, the cat hops down to the floor.
 
 ## Cat Studio
 
-Open it from the popup (or **Extension options**). The live preview at the top runs the same engine as the content script: pet the preview cat, play with the toys or trigger any of the 49 behaviour states.
+Open it from the popup (or **Extension options**). The live preview at the top runs the same engine as the content script: pet the preview cat, pick it up, play with the toys, click the bowls, or trigger any of the 56 behaviour states (including the scruff hold, eating, drinking, asking for a refill and the cuddle).
 
 The cat list on the left has an on/off switch and a remove button for each cat. Below it:
 
@@ -81,11 +90,12 @@ The cat list on the left has an on/off switch and a remove button for each cat. 
 - **Import cats** (or drop a `.chromeow.json` file on the list) adds the cats from a file to free slots. Imported files are checked field by field, and anything unexpected is ignored.
 
 - **Photos.** Add 1–3 photos of your cat. Pick a body part (primary fur, belly, stripes, each eye, nose, paw socks) and click the photo to sample it; drag pins to adjust. Pins remember which photo they sit on, so you can sample eyes from a daylight close-up and fur from another shot. "Correct lamp colour using the white fur" white-balances every sample from the white fur patch, and eye samples that are only pupil are ignored. **Analyze photo** runs local K-Means in CIE-Lab space and suggests a whole palette with each colour's share of the coat.
-- **Coat & markings.** Choose a pattern (solid, tuxedo, classic or mackerel tabby, spotted, calico, tortoiseshell, colourpoint, bicolour/van, the two factory harlequin and mantled tabby coats, or a custom paintable mask), edit every palette colour and tune markings like blaze width, stockings and tail rings.
+- **Coat & markings.** Choose a pattern (solid, tuxedo, classic or mackerel tabby, spotted, calico, tortoiseshell, colourpoint, bicolour/van, Alex's patched tabby and Anna's mantled tabby, or a custom paintable mask), edit every palette colour and tune markings like blaze width and asymmetry, the white saddle band, the amber flank patch, stockings and tail rings. Photo colours never remove a cat's markings, and while the flank patch is on it only takes a genuinely warm amber.
+- **Templates.** **Add cat** can start from Alex or Anna (a separate copy to inspect or customise) or from the other presets.
 - **Paint brush.** Paint directly on the cat's texture atlas (torso, head, legs, tail, ears) with optional UV guides.
-- **Personality.** Name, bio, body shape (chonk, fur length, ears, tail, size, heterochromia) and personality sliders (laziness, hunt drive, sociability, sassiness, clumsiness, affection).
+- **Personality.** Name, bio, body shape (chonk, fur length, ears, tail, size, heterochromia), personality sliders (laziness, hunt drive, sociability, sassiness, clumsiness, affection) and quirks: appetite and thirst, playfulness, love of head and back rubs, how expressive the ears are, how often the cat starts cuddles and grooming, love of sprawling, and which cat it is bonded with.
 - **Sprite sheets.** Bake the procedural cat to a sprite sheet and download it as a `.zip` (`pet.json` + `spritesheet.webp`) or a bare `.webp`:
-  - **ChroMeow HD**: 8 columns, one row per behaviour state, 192×208 px cells
+  - **ChroMeow HD**: 8 columns, one row per behaviour state, 192×208 px cells (sheets baked with 1.x have 49 rows and still import)
   - **OpenPets V1**: 8×9 grid (idle, running right/left, waving, jumping, failed, waiting, running, review)
 
   Import works with ChroMeow HD, OpenPets V1 (8×9), OpenPets V2 (8×11, adds sleeping and sitting) and legacy 9×8 sheets, as `.zip`, `.png` or `.webp`. Switch a cat between procedural and sprite rendering at any time.
@@ -96,35 +106,41 @@ The cat list on the left has an on/off switch and a remove button for each cat. 
 - No analytics, telemetry, accounts or remote code.
 - Photos are decoded and analysed on a canvas in your browser and kept only as downscaled copies in `chrome.storage.local`.
 - Cat positions sync between tabs through the extension's service worker and `chrome.storage.session`, which is cleared when the browser closes.
-- Permissions: `storage` and `unlimitedStorage` (for sprite sheets). The content script runs on all sites so cats can appear anywhere; pause it per site from the popup.
+- Permissions: `storage`, `unlimitedStorage` (for sprite sheets) and `idle` (to know when the computer is idle or locked; Chrome shows no warning for it). The content script runs on all sites so cats can appear anywhere; pause it per site from the popup.
 
 ## How it works
 
 ```
 src/
-  shared/      types, 49-state catalogue, presets, storage, i18n (EN/HE), zip, colour maths
+  shared/      types, 56-state catalogue, presets (Alex & Anna, v1 migration), storage, i18n (EN/HE),
+               cat files, zip, colour maths
   engine/      Physics, Navigator, DomPlatformScanner, VerletTail, CoatTexture, UVLayout,
                Pose, PoseLibrary, ArticulatedCatRenderer, SpriteRenderer, SoundSynthesizer,
                Particles, CatPortrait
   ai/          States (transition graph), FelineFSM, Drives, UtilityBrain, SocialCoordinator,
                HitboxZones
-  sim/         CatAgent (tasks, plans, petting), World (cursor, toys, render loop, snapshots)
-  content/     ContentApp, ShadowDOMOverlay, InputInterceptor, ToyManager
-  background/  StateSyncServiceWorker (cross-tab state, keyboard command, badge)
+  sim/         CatAgent (tasks, plans, petting, scruff hold), World (cursor, grab, toys, render loop,
+               snapshots), FeedingStation, ToyTool, StaticPlatformSource
+  content/     ContentApp, ShadowDOMOverlay, InputInterceptor, ToyManager, PlayMode
+  background/  StateSyncServiceWorker (cross-tab state, chrome.idle, keyboard command, badge)
   popup/       PopupController
   studio/      CatStudioApp, PhotoColorExtractor, CoatPainter, PreviewSandbox, SpriteSheetBaker
 tests/         Vitest suites
 ```
 
-**Overlay.** A single `<div id="chromeow-host">` holds an open shadow root with one full-viewport canvas (`position: fixed; inset: 0; z-index: 2147483647; pointer-events: none`). Mouse tracking uses passive window listeners. Each cat gets an invisible hitbox `<div>` shaped to its silhouette with `clip-path`, which is the only thing that catches the pointer, and only while click-through lock is off.
+**Overlay.** A single `<div id="chromeow-host">` holds an open shadow root with one full-viewport canvas (`position: fixed; inset: 0; z-index: 2147483647; pointer-events: none`). Mouse tracking uses passive window listeners. Each cat gets an invisible hitbox `<div>` shaped to its silhouette with `clip-path`, which is the only thing that catches the pointer, and only while click-through lock is off. The food & water station has a hitbox of its own. When a cat is picked up, a full-window drag shield takes pointer capture (`pointer-events: auto`, `cursor: grabbing`, `selectstart` blocked) until the button is released, the pointer is cancelled or the window loses focus. Every frame clears the whole canvas before drawing.
 
-**Physics.** `DomPlatformScanner` finds standable surfaces during idle time: semantic elements (header, nav, article, images, video, code blocks, inputs, buttons, dialogs) and card-like containers with a visible border, shadow or rounded filled background. An IntersectionObserver tracks what is on screen, ResizeObserver and MutationObserver flag layout changes, scroll is throttled, and `elementsFromPoint` rejects ledges hidden under sticky headers. Each platform is `{ xMin, xMax, y, elementRef }`; the viewport bottom is always the floor. Gravity is 980 px/s². Jumps are solved in closed form for a parabolic arc to the target ledge, and `Navigator` runs Dijkstra over possible hops so a cat can chain jumps to reach a high spot. Cats ride the element they stand on when the page scrolls. A scroll faster than about 2,600 px/s throws them off (`STARTLED_AIRBORNE`).
+**Physics.** `DomPlatformScanner` finds standable surfaces during idle time: semantic elements (header, nav, article, images, video, code blocks, inputs, buttons, dialogs) and card-like containers with a visible border, shadow or rounded filled background. An IntersectionObserver tracks what is on screen, ResizeObserver and MutationObserver flag layout changes, scroll is throttled, and `elementsFromPoint` rejects ledges hidden under sticky headers. Each platform is `{ xMin, xMax, y, elementRef }`; the viewport bottom is always the floor. Gravity is 980 px/s². Jumps are solved in closed form for a parabolic arc to the target ledge, and `Navigator` runs Dijkstra over possible hops so a cat can chain jumps to reach a high spot. When the page scrolls, the world applies the scroll delta to cats standing on elements that scroll with the page before physics runs, and the scanner shifts its cached ledges by the same amount between measurements. Fixed and sticky elements are left in place. A ledge that leaves through the top of the window makes the cat hop down; one that jumps on its own faster than about 2,600 px/s (an animation or layout shift) still throws the cat off (`STARTLED_AIRBORNE`).
 
-**Behaviour.** Every cat has drives (energy, playfulness, affection, curiosity, irritation, social need) and a fixed personality. `UtilityBrain` scores 14 intents (sleep, rest, perch, groom, explore, zoomies, gaze, hunt, keyboard, social, toy, treat, climb, peek) as
+**Holding.** `SCRUFF_HELD` can interrupt any state. The rig rotates so the hips hang below the nape, the nape is pinned to the pointer, and the swing is a spring-damper toward `clamp(−handVx · 0.045, −0.65, 0.65)` rad (hand speed in px per 60 Hz frame). On release the smoothed hand velocity (last 90 ms, capped) becomes the throw.
+
+**Behaviour.** Every cat has drives (energy, playfulness, affection, curiosity, irritation, social need, hunger, thirst), a fixed personality and quirks. `UtilityBrain` scores 16 intents (sleep, rest, perch, groom, explore, zoomies, gaze, hunt, keyboard, social, toy, treat, climb, peek, eat, drink) as
 
 U(a) = Σᵢ wᵢ · fᵢ(dᵢ, context) + ε
 
-with a minimum commitment time, a commitment bonus and a switching margin as hysteresis, so cats don't flicker between activities. Intents become plans of tasks (go to, climb, play a state, pounce, eat). `FelineFSM` enforces the transition graph, so a sleeping cat always wakes through stretch and yawn, while physics interrupts (falls, startles, landings) can cut in anywhere. `SocialCoordinator` pairs cats for greetings, allogrooming, the three cuddle formations, tag, wrestling and jealousy.
+with a minimum commitment time, a commitment bonus and a switching margin as hysteresis, so cats don't flicker between activities. Above hunger 65 or thirst 60 (with something in the bowl) eating or drinking outranks everything. Above 75 with an empty bowl (5 % or less) the cat asks for a refill, then gives up for 45 seconds. Intents become plans of tasks (go to, climb, play a state, pounce, eat). `FelineFSM` enforces the transition graph, so a sleeping cat always wakes through stretch and yawn, while physics interrupts (falls, startles, landings) can cut in anywhere. `SocialCoordinator` pairs cats for greetings, allogrooming, the cuddle formations, tag, wrestling, jealousy, and the idle gather → mutual lick → `CUDDLE_SLEEP` → blink, stretch, yawn and greeting. Bonded partners prefer each other.
+
+Spec names map to states like this: FALLING/JUMPING = `FALL_DESCEND`/`JUMP_ASCEND`, GROOM = `GROOM_LICK_PAW`/`GROOM_WASH_FACE`, SOCIAL_GROOM = `ALLOGROOMING`, STRETCH = `WAKE_ARCH_STRETCH`, YAWN = `BIG_YAWN`, and the empty-bowl wait is `EMPTY_BOWL_WAIT`.
 
 **Rendering.** Each procedural cat is an articulated 2D rig with realistic proportions: a small skull on a short neck, a torso with deep chest, waist and primordial pouch and shoulder blades that roll as it walks, digitigrade legs (thigh to hock to long metatarsus behind; elbow, wrist and pastern in front) solved with two-bone IK, and a six-node Verlet tail (Jakobsen relaxation, bend limits, ledge collision). Coats are painted into a 512×512 UV atlas from the palette, pattern masks, fur-stroke tabby markings and your brush strokes, then mapped onto the body as seamless triangle strips. Every frame the furred parts are painted into an offscreen layer at screen resolution and lit as one body: a world-fixed key light, soft core shadow, sheen and ambient occlusion from blurred silhouettes, contact shadows where parts overlap, and hair fringes instead of outlines. The face has layered irises with slit pupils and wet highlights, nose leather with nostrils, whisker pads and tapered whiskers.
 
@@ -137,7 +153,7 @@ with a minimum commitment time, a commitment bonus and a switching margin as hys
 | `npm run dev` | Rebuilds `dist/` on change |
 | `npm run build` | Production build: pages and service worker, then the content script as an IIFE |
 | `npm run typecheck` | `tsc --noEmit` in strict mode |
-| `npm test` | Vitest: transition graph and FSM, utility scoring and hysteresis, pose springs, Verlet tail, photo colour extraction and white balance, jump physics, hand-held toys, cat export/import, zip round trips, presets and settings |
+| `npm test` | Vitest: transition graph and FSM (including the scruff hold), utility scoring, hysteresis and meals, scruff pendulum and throws, pose springs, Verlet tail, photo colour extraction and white balance, jump physics, hand-held toys, cat export/import, zip round trips, Alex & Anna presets and migration, settings, and headless World runs (eating, empty bowls, picking up and throwing, idle cuddle and wake-up, scrolling) |
 | `npm run verify` | All three of the above |
 
 After rebuilding, press the reload button on the ChroMeow card in `chrome://extensions` and reload your open tabs.
@@ -152,7 +168,7 @@ Made by APK.
 
 ## ChroMeow בעברית
 
-שני חתולים שגרים בדפי האינטרנט שאתם גולשים בהם. הם מטיילים על כותרות וכרטיסים, נרדמים על נגני וידאו חמימים, רודפים אחרי סמן העכבר, צופים בכם מקלידים, מלקקים זה את זה ומתלוננים כשמלטפים את השני יותר מדי זמן. הכול רץ מקומית בדפדפן: בלי שרתים, בלי מעקב ובלי שום בקשת רשת.
+אלכס ואנה, שני חתולים שגרים בדפי האינטרנט שאתם גולשים בהם. הם מטיילים על כותרות וכרטיסים, נרדמים על נגני וידאו חמימים, רודפים אחרי סמן העכבר, צופים בכם מקלידים, אוכלים ושותים מהקערות שלהם, מלקקים זה את זה, מתכרבלים יחד כשאתם הולכים ומתלוננים כשמלטפים את השני יותר מדי זמן. אפשר להרים אותם בעורף ולשאת אותם לכל מקום. הכול רץ מקומית בדפדפן: בלי שרתים, בלי מעקב ובלי שום בקשת רשת.
 
 ### התקנה
 
@@ -174,12 +190,12 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 
 ### הכירו את החתולים
 
-שני חתולים פעילים כבר מההתחלה, שניהם בדמות טאבי חום-לבן אמיתי: חזה ובטן לבנים, להבה לבנה בצורת V הפוך, סימן ה-M על המצח, "אייליינר" כהה, זנב עם טבעות וקצה כהה.
+אלכס ואנה פעילים כבר מההתחלה. שניהם טאבי מקרל חום-לבן בדמות חתולים אמיתיים: חזה ובטן לבנים, סימן ה-M על המצח, "אייליינר" כהה וזנב עם טבעות וקצה כהה.
 
-- **חתול 1**: פס כתפיים לבן שחוצה את האוכף, כתם זהוב בצד, רגליים קדמיות לבנות לגמרי. ישנה עם הסנטר על מדף, עצלנית, חברותית ועם הרבה עמדה: מבט ה"אוזני מטוס" השיפוטי שייך לה.
-- **חתול 2**: גלימת טאבי רציפה, כתם לבן קטן על הגב התחתון, להבה רחבה יותר. ישן כ"כיכר נמסה" עם זנב שמשתלשל מהקצה, אוהב להתכרבל כמו כרית וצייד נלהב יותר.
+- **אלכס**: טאבי מקרל חום-אפור מוטלא עם לבן וגוונים חמים. פס לבן חוצה את הגב מאחורי הכתפיים ("אוכף שבור"), וכתם ענבר חם (#D47A34 שמעמיק ל-#B86528) נמצא נמוך בצד, היכן שהטאבי פוגש את הבטן הלבנה. להבה לבנה רחבה ולא סימטרית על הלוע והלחיים, אף ורוד, רגליים לבנות. קצת יותר חסון. רגוע ומלא חיבה: אוהב להשתרע ולמתוח את הכפות הקדמיות, נעשה רעב קצת יותר מהר, מת על ליטופים בראש, בסנטר ובגב, ומסור לאנה.
+- **אנה**: טאבי מקרל קלאסי בגוון חום-פחם קריר עם לבן: פסים כהים וחדים על פרווה אפרפרה, וגלימת טאבי אחת רציפה מהראש ועד בסיס הזנב (בלי פס לבן ובלי כתם כתום). להבה צרה וסימטרית, אף ורוד עדין, אייליינר חד, חזה, בטן וגרביים לבנים. ציידת זריזה של סמן העכבר עם "אוזני מטוס" כשהיא מתעצבנת, ולרוב היא זו שמתחילה ללקק ולהתכרבל עם אלכס.
 
-אפשר לשנות את השמות בחלון הקופץ או בסטודיו (שמות בעברית עובדים), ולהוסיף עד שישה חתולים.
+אפשר לשנות את השמות בחלון הקופץ או בסטודיו, ולהוסיף עד שישה חתולים. מי שהשתמש ב-ChroMeow 1.x יקבל את "חתול 1" ו"חתול 2" כאלכס ואנה; שם, צבעים, ציור ותמונות ששיניתם נשמרים.
 
 ### שימוש
 
@@ -188,19 +204,28 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 - לקחת צעצוע, חטיפים, לייזר או כדור, ולשחק בדף עם הכפתור השמאלי של העכבר, או לקרוא לחתולים למרכז החלון
 - **נעילת מעבר לחיצות**: החתולים מפסיקים לתפוס את העכבר וניתן ללחוץ על מה שמתחתם. קיצור מקלדת: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>
 - להשהות באתר הנוכחי (נשמר לפי דומיין) או בכל מקום
+- **אוכל ומים**: כמה מלאה כל קערה, **מילוי אוכל 🍖** ו**מילוי מים 💧**, ומתג להצגה או הסתרה של פינת האוכל
+- **להתכרבל יחד כשאני לא ליד המחשב**: אחרי כמה זמן בלי עכבר ומקלדת החתולים מתכרבלים (30 שניות עד 30 דקות, ברירת המחדל 2 דקות)
 - צליל ועוצמה, גודל החתולים, תגיות שם ומצב רגוע
 - לפתוח את סטודיו החתולים
 
 **ליטוף.** העבירו את העכבר הלוך ושוב מעל החתול. סנטר ולחיים: גרגור בעיניים חצי עצומות. ראש ואוזניים: רעד באוזניים, גרגור ואז לישת עוגיות. גב ובסיס הזנב: "מעלית" עם הישבן וגרגור. כפות קדמיות: קיפול כפות. בטן: התגלגלות על הגב, ואז לפי מצב הרוח נהנים או עונים בבעיטות ובחבטה. זנב: הצלפות זנב ואוזני מטוס. ליטוף ארוך של חתול אחד (כשמונה שניות) עלול להביא את השני לדחוף את עצמו פנימה.
+
+**הרמת חתול.** לוחצים על חתול וגוררים (יותר מ-5 פיקסלים), או לוחצים ישר על העורף מאחורי האוזניים, והחתול מורם בעורף. הוא נרגע, עוצם חצי עיניים ותלוי מתחת לסמן: הכפות הקדמיות משתלשלות, הרגליים האחוריות מתקפלות פנימה, הזנב צונח והגוף מתנדנד עם היד ונרגע כשהיא עומדת. בזמן ההחזקה הסמן ננעל על השכבה של החתולים, כך שגם תנועה מהירה לא בוחרת טקסט בדף. משחררים כדי להוריד, או מנערים כדי לזרוק. החתול נופל, נוחת על המדף או הרצפה, ומלקק כף כדי ליישר את הפרווה.
+
+**אוכל ומים.** בתחתית החלון (מימין כברירת מחדל) יש מחצלת עם קערת אוכל וקערת מים. רעב וצמא מצטברים עם הזמן, מהר יותר אחרי ריצות ומשחק. חתול רעב או צמא הולך לקערה, אוכל או שותה, ואחר כך מתיישב לרחיצת פנים קצרה. כשהקערה ריקה, חתול רעב מאוד מתיישב לידה, מסתכל עליכם ומיילל, עם בועת מחשבה של דג או טיפת מים. לחיצה על קערה ממלאת אותה, וגרירת המחצלת מזיזה את הפינה. כמות האוכל משותפת לכל הלשוניות.
+
+**כשאתם הולכים.** אחרי זמן ההמתנה בלי עכבר ומקלדת (או כשהמחשב ננעל), אלכס ואנה הולכים זה אל זה, מלקקים זה את זה לרגע ונרדמים צמודים, אנה שעונה על אלכס, נושמים באותו קצב. כשאתם חוזרים הם מתעוררים לאט: מצמוץ ארוך, מתיחה, פיהוק, ואז אלכס ניגש לסמן עם זנב בצורת סימן שאלה ומגרגר.
 
 **משחק עם צעצועים.** אחרי שבוחרים צעצוע מופיע סרגל קטן בראש הדף, והכפתור השמאלי משחק במקום ללחוץ על קישורים. חטיפים: לחיצה בכל מקום מפילה חטיף. לייזר: מחזיקים את הכפתור והנקודה זזה עם העכבר. כדור: לוחצים, גוררים ומשחררים כדי לזרוק. <kbd>Esc</kbd>, לחיצה ימנית או "סיום" מחזירים את הדף לרגיל.
 
 ### סטודיו החתולים
 
 - **תמונות**: העלו 1–3 תמונות, בחרו איבר ולחצו על התמונה כדי לדגום את הצבע. כל סיכה זוכרת לאיזו תמונה היא שייכת, כך שאפשר לדגום עיניים מתמונה אחת ופרווה מאחרת. האפשרות "תיקון גוון התאורה לפי הפרווה הלבנה" מאזנת את הלבן של כל הדגימות. "ניתוח תמונה" מריץ K-Means מקומי ומציע פלטה שלמה.
-- **פרווה וסימנים**: בחירת דוגמה, עריכת כל צבע בפלטה וכוונון הסימנים.
+- **פרווה וסימנים**: בחירת דוגמה, עריכת כל צבע בפלטה וכוונון הסימנים, כולל אי-הסימטריה של הלהבה, הפס הלבן על הגב וכתם הענבר. צבעים מתמונה לא מוחקים את הסימנים של החתול.
+- **תבניות**: "הוספת חתול" יכולה להתחיל מאלכס או מאנה (עותק נפרד לבדיקה ולהתאמה).
 - **מכחול**: ציור ישיר על מפת הטקסטורה של החתול.
-- **אישיות**: שם, ביוגרפיה, מבנה גוף ומחווני אישיות.
+- **אישיות**: שם, ביוגרפיה, מבנה גוף, מחווני אישיות ותכונות מיוחדות: תיאבון וצמא, שובבות, אהבה לליטופים, אוזניים אקספרסיביות, יוזמה לכרבולים, אהבה להשתרע, ועם מי החתול קשור.
 - **גיליונות ספרייטים**: ייצוא לקובץ `.zip` (עם `pet.json`) או `.webp` בפורמט ChroMeow HD או OpenPets V1, וייבוא של ChroMeow HD,‏ OpenPets V1/V2 וגיליונות 9×8 ישנים.
 - **ייצוא וייבוא חתולים**: "ייצוא החתול" או "ייצוא הכול" שומרים קובץ `.chromeow.json` עם כל פרטי החתול (פרווה, סימנים, גוף, אישיות, ציור, תמונות וספרייטים). "ייבוא חתולים" (או גרירת הקובץ לרשימה) מוסיף אותם למקומות פנויים.
 - ברשימת החתולים יש לכל חתול מתג הפעלה וכפתור הסרה.
@@ -211,6 +236,7 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 - אין אנליטיקה, טלמטריה, חשבונות או קוד מרוחק.
 - התמונות מנותחות על קנבס בדפדפן ונשמרות רק כעותקים מוקטנים ב-`chrome.storage.local`.
 - מיקומי החתולים מסונכרנים בין לשוניות דרך ה-service worker של התוסף ו-`chrome.storage.session`, שנמחק כשהדפדפן נסגר.
+- הרשאות: `storage`,‏ `unlimitedStorage` ו-`idle` (כדי לדעת מתי המחשב לא בשימוש או נעול; Chrome לא מציג עליה אזהרה).
 
 ### פיתוח
 

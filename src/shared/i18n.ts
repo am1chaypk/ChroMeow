@@ -159,7 +159,7 @@ const EN: Dict = {
   blazeSoftness: 'Blaze softness',
   blazeHeight: 'Blaze height',
   shoulderBand: 'White shoulder band (broken saddle)',
-  flankPatch: 'Golden flank patch',
+  flankPatch: 'Amber flank patch',
   rumpCrest: 'White rump crest',
   eyeliner: 'Eyeliner',
   mMark: 'Forehead “M”',
@@ -184,6 +184,33 @@ const EN: Dict = {
   eyeLeft: 'Left eye',
   eyeRight: 'Right eye',
   eyeRim: 'Eye rim',
+  blazeAsymmetry: 'Blaze asymmetry',
+  traits: 'Quirks',
+  hungerRateMultiplier: 'Appetite',
+  thirstRateMultiplier: 'Thirst',
+  playTrait: 'Playfulness',
+  pettingAffinity: 'Loves head & back rubs',
+  earExpressiveness: 'Expressive ears',
+  socialInitiative: 'Starts cuddles & grooming',
+  sprawlLover: 'Loves to sprawl & stretch',
+  bondedWith: 'Bonded with',
+  nobody: 'Nobody in particular',
+  templateAlex: 'Alex (built-in)',
+  templateAnna: 'Anna (built-in)',
+  station: 'Food & water',
+  stationShow: 'Show the food & water station',
+  food: 'Food',
+  water: 'Water',
+  refillFood: 'Refill food',
+  refillWater: 'Refill water',
+  stationHint: 'Click a bowl on the page to refill it, drag the mat to move it.',
+  idleCuddle: 'Cuddle up when I’m away',
+  idleAfter: 'after',
+  minutesShort: 'min',
+  secondsShort: 's',
+  pickUpHint: 'Drag a cat to pick it up by the scruff.',
+  hungry: 'Hungry',
+  thirsty: 'Thirsty',
 };
 
 const HE: Dict = {
@@ -336,7 +363,7 @@ const HE: Dict = {
   blazeSoftness: 'רכות הפס',
   blazeHeight: 'גובה הפס',
   shoulderBand: 'פס כתף לבן (אוכף שבור)',
-  flankPatch: 'כתם זהוב בצד',
+  flankPatch: 'כתם ענבר בצד',
   rumpCrest: 'כתם לבן בעכוז',
   eyeliner: 'אייליינר',
   mMark: '״M״ במצח',
@@ -360,6 +387,33 @@ const HE: Dict = {
   eyeLeft: 'עין שמאל',
   eyeRight: 'עין ימין',
   eyeRim: 'מסגרת עין',
+  blazeAsymmetry: 'אי־סימטריה של הפס',
+  traits: 'תכונות מיוחדות',
+  hungerRateMultiplier: 'תיאבון',
+  thirstRateMultiplier: 'צמא',
+  playTrait: 'שובבות',
+  pettingAffinity: 'אוהב ליטופים בראש ובגב',
+  earExpressiveness: 'אוזניים אקספרסיביות',
+  socialInitiative: 'יוזם כרבולים וליקוקים',
+  sprawlLover: 'אוהב להתמתח ולהשתרע',
+  bondedWith: 'קשור במיוחד אל',
+  nobody: 'אף אחד במיוחד',
+  templateAlex: 'אלכס (מובנה)',
+  templateAnna: 'אנה (מובנית)',
+  station: 'אוכל ומים',
+  stationShow: 'הצג את פינת האוכל והמים',
+  food: 'אוכל',
+  water: 'מים',
+  refillFood: 'מילוי אוכל',
+  refillWater: 'מילוי מים',
+  stationHint: 'לחיצה על קערה בדף ממלאת אותה, גרירת המחצלת מזיזה אותה.',
+  idleCuddle: 'להתכרבל יחד כשאני לא ליד המחשב',
+  idleAfter: 'אחרי',
+  minutesShort: 'דק׳',
+  secondsShort: 'שנ׳',
+  pickUpHint: 'גררו חתול כדי להרים אותו בעורף.',
+  hungry: 'רעב',
+  thirsty: 'צמא',
 };
 
 const STATE_LABELS_EN: Record<CatState, string> = {
@@ -412,6 +466,13 @@ const STATE_LABELS_EN: Record<CatState, string> = {
   LEDGE_CHIN_REST: 'Chin on the ledge',
   WIDE_PAW_SPLAY: 'Wide paw splay',
   JUDGMENTAL_AIRPLANE_SQUINT: 'Judgmental squint',
+  SCRUFF_HELD: 'Held by the scruff',
+  SEEKING_FOOD: 'Heading for the food bowl',
+  EATING: 'Eating',
+  SEEKING_WATER: 'Heading for the water bowl',
+  DRINKING: 'Drinking',
+  EMPTY_BOWL_WAIT: 'Asking for a refill',
+  CUDDLE_SLEEP: 'Cuddled up asleep together',
 };
 
 const STATE_LABELS_HE: Record<CatState, string> = {
@@ -464,6 +525,13 @@ const STATE_LABELS_HE: Record<CatState, string> = {
   LEDGE_CHIN_REST: 'סנטר על המדף',
   WIDE_PAW_SPLAY: 'כפות פרושות',
   JUDGMENTAL_AIRPLANE_SQUINT: 'מבט שיפוטי',
+  SCRUFF_HELD: 'מוחזק בעורף',
+  SEEKING_FOOD: 'בדרך לקערת האוכל',
+  EATING: 'אוכל',
+  SEEKING_WATER: 'בדרך לקערת המים',
+  DRINKING: 'שותה',
+  EMPTY_BOWL_WAIT: 'מבקש מילוי',
+  CUDDLE_SLEEP: 'ישנים מכורבלים יחד',
 };
 
 const PATTERN_LABELS: Record<string, [string, string]> = {
@@ -476,8 +544,8 @@ const PATTERN_LABELS: Record<string, [string, string]> = {
   TORTOISESHELL: ['Tortoiseshell', 'צב (טורטי)'],
   COLORPOINT: ['Colorpoint', 'קולורפוינט'],
   BICOLOR_VAN: ['Bicolor / Van', 'דו־צבעי / ואן'],
-  PATCHED_TABBY_HARLEQUIN: ['Patched harlequin tabby (Cat 1)', 'טאבי הרלקין מוטלא (חתול 1)'],
-  MANTLED_BICOLOR_TABBY: ['Mantled bicolor tabby (Cat 2)', 'טאבי דו־צבעי עם גלימה (חתול 2)'],
+  PATCHED_TABBY_HARLEQUIN: ['Patched tabby with white (Alex)', 'טאבי מוטלא עם לבן (אלכס)'],
+  MANTLED_BICOLOR_TABBY: ['Mantled tabby with white (Anna)', 'טאבי עם גלימה ולבן (אנה)'],
   CUSTOM_MASK: ['Custom paintable mask', 'מסכה מותאמת לציור'],
 };
 
@@ -520,6 +588,18 @@ export function tf(key: string, vars: Record<string, string | number>): string {
 
 export function stateLabel(state: CatState): string {
   return (current === 'he' ? STATE_LABELS_HE : STATE_LABELS_EN)[state] ?? state;
+}
+
+/** Built-in cats have a Hebrew name too; a name the user typed is always shown as typed. */
+const BUILTIN_NAMES: Record<string, [string, string]> = {
+  alex: ['Alex', 'אלכס'],
+  anna: ['Anna', 'אנה'],
+};
+
+export function displayName(profile: { name: string; presetKey: string }): string {
+  const pair = BUILTIN_NAMES[profile.presetKey];
+  if (pair && (profile.name === pair[0] || profile.name === pair[1])) return pair[current === 'he' ? 1 : 0];
+  return profile.name;
 }
 
 export function patternLabel(pattern: string): string {

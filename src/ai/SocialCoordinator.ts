@@ -12,6 +12,12 @@
  *  • PLAY_TAG_CHASE → PLAY_WRESTLE
  *  • JEALOUSY_INTERVENTION    — pet one cat > 8 s and the other muscles in
  *  • JUDGMENTAL_AIRPLANE_SQUINT when the cursor whips past a sleeping pair
+ *  • IDLE_GATHER → CUDDLE_SLEEP — when you step away, the bonded pair walks
+ *    together, trades a quick lick and falls asleep pressed together; when you
+ *    come back they blink, stretch, yawn, and one trots over to greet you.
+ *
+ * Cats prefer their bonded partner (traits.bondedWith), and cats with a high
+ * social initiative choose grooming and cuddles over boops and chases.
  */
 import { clamp, dist } from '../shared/math';
 import type { CatState } from '../shared/catStates';
@@ -19,7 +25,7 @@ import { platformWidth } from '../engine/Physics';
 import type { AgentEnv, CatAgent, SocialHooks, Task } from '../sim/CatAgent';
 import type { IntentKind } from './UtilityBrain';
 
-export type SocialKind = 'boop' | 'allogroom' | 'yinyang' | 'tandem' | 'pillow' | 'play' | 'jealousy';
+export type SocialKind = 'boop' | 'allogroom' | 'yinyang' | 'tandem' | 'pillow' | 'play' | 'jealousy' | 'idle';
 
 export interface SocialSession {
   id: number;
@@ -60,12 +66,20 @@ export class SocialCoordinator implements SocialHooks {
     if (!partner) return false;
     const now = env.now;
     const tired = agent.drives.energy < 45;
-    if (kind === 'sleep' || (partner.isAsleep() && tired)) return this.startCuddle(agent, partner, env);
+    const initiative = agent.profile.traits.socialInitiative;
+    if (kind === 'sleep' || (partner.isAsleep() && (tired || agent.rng.chance(0.4 * initiative)))) return this.startCuddle(agent, partner, env);
+    // Groomers (Anna) reach for a grooming session first.
+    if (partner.isResting() && !partner.isAsleep() && agent.rng.chance(initiative) && this.cooled(agent, partner, 'groom', now)) return this.startAllogroom(agent, partner, env);
     const playful = agent.drives.playfulness > 55 && partner.drives.playfulness > 45 && agent.drives.energy > 45 && partner.drives.energy > 40 && !partner.isAsleep();
     if (playful && this.cooled(agent, partner, 'play', now)) return this.startPlay(agent, partner, env);
     if (partner.isResting() && !partner.isAsleep() && this.cooled(agent, partner, 'groom', now)) return this.startAllogroom(agent, partner, env);
     if (!partner.isAsleep() && this.cooled(agent, partner, 'boop', now)) return this.startBoop(agent, partner, env);
     return false;
+  }
+
+  /** True when either cat names the other as its bonded partner. */
+  static bonded(a: CatAgent, b: CatAgent): boolean {
+    return a.profile.traits.bondedWith === b.id || b.profile.traits.bondedWith === a.id;
   }
 
   private pickPartner(agent: CatAgent, env: AgentEnv): CatAgent | null {
@@ -74,8 +88,9 @@ export class SocialCoordinator implements SocialHooks {
     for (const o of env.others) {
       if (o === agent || o.social || this.sessionOf(o)) continue;
       if (!(o.availableForSocial() || o.isAsleep())) continue;
-      if (o.isAirborne() || o.isClimbing()) continue;
-      const d = dist(o.x, o.y, agent.x, agent.y);
+      if (o.isAirborne() || o.isClimbing() || o.isHeld()) continue;
+      // The bonded partner counts as much closer than it is.
+      const d = dist(o.x, o.y, agent.x, agent.y) * (SocialCoordinator.bonded(agent, o) ? 0.3 : 1);
       if (d < bd) {
         bd = d;
         best = o;
@@ -100,7 +115,7 @@ export class SocialCoordinator implements SocialHooks {
       c.poseRole = 0;
       if (keepSleeping && c.isAsleep()) {
         const st = c.state;
-        const calm: CatState = st === 'PILLOW_STACK_CUDDLE' || st === 'YIN_YANG_CUDDLE_SLEEP' ? 'CURLED_SLEEP' : st === 'TANDEM_BELLY_HOLD_SLEEP' ? 'SPRAWLED_SLEEP' : st;
+        const calm: CatState = st === 'PILLOW_STACK_CUDDLE' || st === 'YIN_YANG_CUDDLE_SLEEP' || st === 'CUDDLE_SLEEP' ? 'CURLED_SLEEP' : st === 'TANDEM_BELLY_HOLD_SLEEP' ? 'SPRAWLED_SLEEP' : st;
         c.setPlan([{ kind: 'state', state: calm, dur: c.rng.range(20, 60) }], 'sleep');
       } else c.clearPlan();
     }
@@ -339,6 +354,148 @@ export class SocialCoordinator implements SocialHooks {
     return true;
   }
 
+  /* ------------------------------------------------------- idle cuddle */
+
+  /** The pair that cuddles while the user is away: a bonded pair if there is one, else the first two cats. */
+  idlePair(agents: CatAgent[]): [CatAgent, CatAgent] | null {
+    const ok = agents.filter((a) => !a.isHeld() && !a.isClimbing());
+    for (let i = 0; i < ok.length; i++) for (let j = i + 1; j < ok.length; j++) if (SocialCoordinator.bonded(ok[i], ok[j])) return [ok[i], ok[j]];
+    return ok.length >= 2 ? [ok[0], ok[1]] : null;
+  }
+
+  /**
+   * IDLE_GATHER: the pair walks to a comfortable spot (the floor, or a wide ledge
+   * they share), trades a brief mutual lick, then curls up pressed together in
+   * CUDDLE_SLEEP with synchronised breathing. Everyone else just naps.
+   */
+  startIdleGather(agents: CatAgent[], env: AgentEnv): boolean {
+    const pair = this.idlePair(agents);
+    for (const a of agents) {
+      if (pair && (a === pair[0] || a === pair[1])) continue;
+      if (!a.isAsleep() && !a.isHeld()) a.command('sleep', env);
+    }
+    if (!pair) return false;
+    for (const s of [...this.sessions]) if (s.a === pair[0] || s.b === pair[0] || s.a === pair[1] || s.b === pair[1]) this.end(s);
+    // The snuggler drapes over the other (Anna over Alex); the other is the pillow.
+    const [p0, p1] = pair;
+    const drapeScore = (c: CatAgent) => c.profile.traits.socialInitiative + (c.profile.signature.pillowSnuggler ? 0.5 : 0);
+    const draper = drapeScore(p1) >= drapeScore(p0) ? p1 : p0;
+    const pillow = draper === p0 ? p1 : p0;
+    const spot = this.cuddleSpot(pillow, draper, env);
+    const L = Math.max(pillow.bodyLen(), draper.bodyLen());
+    const f = spot.face;
+    const xPillow = spot.x + f * L * 0.3;
+    const xDraper = spot.x - f * L * 0.32;
+    const s = this.begin('idle', pillow, draper, env, 3600);
+    const arrived = (c: CatAgent, x: number) => c.groundId === spot.platformId && Math.abs(c.x - x) < 14 * c.S && !c.isAirborne() && Math.abs(c.vx) < 20;
+    const both = () => arrived(pillow, xPillow) && arrived(draper, xDraper);
+    const lick = 2.6;
+    const towards = (me: CatAgent, other: CatAgent) => (): 1 | -1 => (other.x >= me.x ? 1 : -1);
+    const sleepDur = 3600;
+    pillow.setPlan(
+      [
+        { kind: 'goto', spot: { platformId: spot.platformId, x: xPillow }, gait: 'SAUNTER_WALK', maxTime: 40 },
+        { kind: 'wait', until: both, maxTime: 40, face: towards(pillow, draper) },
+        { kind: 'state', state: 'ALLOGROOM_RECEIVE', dur: lick },
+        { kind: 'state', state: 'ALLOGROOMING', dur: lick, face: towards(pillow, draper) },
+        { kind: 'state', state: 'CUDDLE_SLEEP', dur: sleepDur, face: f, role: 0 },
+      ],
+      'idle-cuddle',
+      true,
+    );
+    draper.setPlan(
+      [
+        { kind: 'goto', spot: { platformId: spot.platformId, x: xDraper }, gait: 'SAUNTER_WALK', maxTime: 40 },
+        { kind: 'wait', until: both, maxTime: 40, face: towards(draper, pillow) },
+        { kind: 'state', state: 'ALLOGROOMING', dur: lick, face: towards(draper, pillow) },
+        { kind: 'do', fn: () => pillow.lm && env.particles.emit('heart', pillow.lm.head.x, pillow.lm.head.y - 12 * pillow.S, 2, pillow.S) },
+        { kind: 'state', state: 'ALLOGROOM_RECEIVE', dur: lick },
+        { kind: 'state', state: 'CUDDLE_SLEEP', dur: sleepDur, face: f, role: 1 },
+      ],
+      'idle-cuddle',
+      true,
+    );
+    void s;
+    return true;
+  }
+
+  /** A spot both cats can reach: a wide ledge they already share, otherwise the floor between them, clear of the bowls. */
+  private cuddleSpot(a: CatAgent, b: CatAgent, env: AgentEnv): { platformId: string; x: number; face: 1 | -1 } {
+    const L = Math.max(a.bodyLen(), b.bodyLen());
+    const pa = a.currentPlatform(env);
+    let plat = pa && pa.kind === 'dom' && a.groundId === b.groundId && platformWidth(pa) > L * 2.8 ? pa : env.source.floor();
+    if (!plat) plat = env.source.floor();
+    const lo = plat.xMin + L * 1.1;
+    const hi = plat.xMax - L * 1.1;
+    let x = clamp((a.x + b.x) / 2, lo, Math.max(lo, hi));
+    const st = env.station;
+    if (plat.kind === 'floor' && st?.enabled) {
+      const r = st.rect(env.bounds);
+      const pad = L * 1.25;
+      if (x > r.minX - pad && x < r.maxX + pad) {
+        const left = r.minX - pad;
+        const right = r.maxX + pad;
+        x = left > lo && (x - left < right - x || right > hi) ? left : right < hi ? right : left;
+      }
+    }
+    const face: 1 | -1 = x < env.bounds.width / 2 ? 1 : -1;
+    return { platformId: plat.id, x, face };
+  }
+
+  /**
+   * The user is back: the cuddling pair wakes slowly (a long blink, a stretch, a
+   * yawn) and the more affectionate one trots over to the cursor, tail up in a
+   * question mark, purring.
+   */
+  wakeFromIdle(agents: CatAgent[], env: AgentEnv): void {
+    const session = this.sessions.find((s) => s.kind === 'idle');
+    const pair = session ? [session.a, session.b] : this.idlePair(agents);
+    if (session) {
+      this.sessions = this.sessions.filter((x) => x !== session);
+      for (const c of [session.a, session.b]) {
+        c.social = null;
+        c.poseRole = 0;
+      }
+    }
+    if (!pair) return;
+    const [a, b] = pair;
+    if (!agents.includes(a) || !agents.includes(b)) return;
+    const greeter = a.profile.personality.affection >= b.profile.personality.affection ? a : b;
+    for (const c of [a, b]) {
+      const wake: Task[] = [];
+      if (c.isAsleep()) {
+        wake.push(
+          { kind: 'do', fn: () => c.slowBlink() },
+          { kind: 'state', state: c.state, dur: 1.5 },
+          { kind: 'state', state: 'WAKE_ARCH_STRETCH', dur: 99 },
+          { kind: 'state', state: 'BIG_YAWN', dur: 99 },
+        );
+      }
+      if (c === greeter) {
+        wake.push(
+          { kind: 'do', fn: () => c.greet(env, 9) },
+          {
+            kind: 'goto',
+            spot: () => {
+              const live = c.liveEnv ?? env;
+              const cur = live.cursor;
+              const floor = live.source.floor();
+              const tx = cur.present ? cur.x : live.bounds.width / 2;
+              const side = tx >= c.x ? 1 : -1;
+              return { platformId: floor.id, x: clamp(tx - side * 46 * c.S, 30, live.bounds.width - 30) };
+            },
+            gait: 'TROT',
+            maxTime: 12,
+          },
+          { kind: 'state', state: 'CURSOR_GAZE', dur: 6, face: () => ((c.liveEnv ?? env).cursor.x >= c.x ? 1 : -1) },
+        );
+      } else {
+        wake.push({ kind: 'state', state: 'IDLE_SIT', dur: c.rng.range(2, 4) }, { kind: 'state', state: 'GROOM_WASH_FACE', dur: 99 });
+      }
+      c.setPlan(wake, 'idle-wake', true);
+    }
+  }
+
   /* --------------------------------------------------------------- update */
 
   update(agents: CatAgent[], env: AgentEnv): void {
@@ -349,9 +506,9 @@ export class SocialCoordinator implements SocialHooks {
       const gone = !agents.includes(s.a) || !agents.includes(s.b);
       const broken = gone || s.a.social?.sessionId !== s.id || s.b.social?.sessionId !== s.id;
       const stale = now - s.started > s.maxDuration;
-      const fell = s.a.isAirborne() && !s.a.plan.length;
+      const fell = (s.a.isAirborne() && !s.a.plan.length) || s.a.isHeld() || s.b.isHeld();
       if (broken || stale || fell) {
-        const sleepy = s.kind === 'yinyang' || s.kind === 'tandem' || s.kind === 'pillow';
+        const sleepy = s.kind === 'yinyang' || s.kind === 'tandem' || s.kind === 'pillow' || s.kind === 'idle';
         this.end(s, sleepy);
       }
     }

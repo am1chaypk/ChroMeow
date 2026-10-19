@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CatFileError, MAX_CAT_FILE_BYTES, exportFileName, mergeImported, parseCatFile, sanitizeCat, serializeCats } from '../src/shared/catFile';
-import { MAX_CATS, createCat1, createCat2, defaultProfiles } from '../src/shared/presets';
+import { MAX_CATS, createAlex, createAnna, defaultProfiles } from '../src/shared/presets';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 describe('cat export / import', () => {
   it('round-trips a custom cat with photos, paint and sprite sheet', () => {
-    const cat = { ...createCat1(), name: 'מיצי', bio: 'Loves boxes', photos: [PNG], paintMask: PNG };
+    const cat = { ...createAlex(), name: 'מיצי', bio: 'Loves boxes', photos: [PNG], paintMask: PNG };
     cat.sprite = { dataUrl: PNG, columns: 8, rows: 9, cellWidth: 192, cellHeight: 208, animations: { idle: { row: 0, frames: 8, fps: 6, loop: true } }, source: 'openpets-v1', anchorY: 0.95, facesLeft: false };
     cat.renderMode = 'sprite';
     const [back] = parseCatFile(serializeCats([cat]), 3);
@@ -26,20 +26,20 @@ describe('cat export / import', () => {
   });
 
   it('accepts a bare cat object as well as a full file', () => {
-    const cats = parseCatFile(JSON.stringify(createCat2()));
+    const cats = parseCatFile(JSON.stringify(createAnna()));
     expect(cats).toHaveLength(1);
     expect(cats[0].pattern).toBe('MANTLED_BICOLOR_TABBY');
   });
 
   it('sanitises untrusted fields', () => {
     const evil = {
-      ...createCat1(),
+      ...createAlex(),
       name: 'x'.repeat(200),
       pattern: 'NOT_A_PATTERN',
-      palette: { ...createCat1().palette, baseWhite: 'url(javascript:alert(1))', eyeLeft: '#123456' },
-      markings: { ...createCat1().markings, tailRings: 99, whiteAmount: -4 },
-      morphology: { ...createCat1().morphology, chonk: 50, furLength: '<img>' },
-      personality: { ...createCat1().personality, sassiness: 7 },
+      palette: { ...createAlex().palette, baseWhite: 'url(javascript:alert(1))', eyeLeft: '#123456' },
+      markings: { ...createAlex().markings, tailRings: 99, whiteAmount: -4 },
+      morphology: { ...createAlex().morphology, chonk: 50, furLength: '<img>' },
+      personality: { ...createAlex().personality, sassiness: 7 },
       photos: ['javascript:alert(1)', 'data:text/html;base64,PHNjcmlwdD4=', PNG, PNG, PNG, PNG],
       paintMask: 'https://example.com/x.png',
       sprite: { dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=', columns: 8, rows: 9, cellWidth: 10, cellHeight: 10, animations: {} },
@@ -48,13 +48,13 @@ describe('cat export / import', () => {
     };
     const c = sanitizeCat(evil, 1) as unknown as Record<string, unknown> & ReturnType<typeof sanitizeCat>;
     expect(c.name.length).toBeLessThanOrEqual(28);
-    expect(c.pattern).toBe(createCat1().pattern);
-    expect(c.palette.baseWhite).toBe(createCat1().palette.baseWhite);
+    expect(c.pattern).toBe(createAlex().pattern);
+    expect(c.palette.baseWhite).toBe(createAlex().palette.baseWhite);
     expect(c.palette.eyeLeft).toBe('#123456');
     expect(c.markings.tailRings).toBe(8);
     expect(c.markings.whiteAmount).toBe(0);
     expect(c.morphology.chonk).toBe(1.4);
-    expect(c.morphology.furLength).toBe(createCat1().morphology.furLength);
+    expect(c.morphology.furLength).toBe(createAlex().morphology.furLength);
     expect(c.personality.sassiness).toBe(1);
     expect(c.photos).toEqual([PNG, PNG, PNG]);
     expect(c.paintMask).toBeNull();
@@ -80,7 +80,7 @@ describe('cat export / import', () => {
 
   it('places imported cats in free slots and stops at the cat limit', () => {
     const existing = defaultProfiles();
-    const imported = parseCatFile(serializeCats([createCat1(), createCat2(), createCat1(), createCat2(), createCat1(), createCat2()]));
+    const imported = parseCatFile(serializeCats([createAlex(), createAnna(), createAlex(), createAnna(), createAlex(), createAnna()]));
     const { profiles, added, skipped } = mergeImported(existing, imported);
     expect(profiles).toHaveLength(MAX_CATS);
     expect(added).toHaveLength(MAX_CATS - 2);
@@ -90,8 +90,8 @@ describe('cat export / import', () => {
   });
 
   it('names export files after the cat', () => {
-    expect(exportFileName([{ ...createCat1(), name: 'Miso / the cat' }])).toBe('Miso-the-cat.chromeow.json');
-    expect(exportFileName([{ ...createCat1(), name: 'מיצי' }])).toBe('מיצי.chromeow.json');
+    expect(exportFileName([{ ...createAlex(), name: 'Miso / the cat' }])).toBe('Miso-the-cat.chromeow.json');
+    expect(exportFileName([{ ...createAlex(), name: 'מיצי' }])).toBe('מיצי.chromeow.json');
     expect(exportFileName(defaultProfiles())).toBe('chromeow-cats.chromeow.json');
   });
 });

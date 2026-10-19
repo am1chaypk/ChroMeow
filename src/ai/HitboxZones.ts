@@ -1,5 +1,5 @@
 /**
- * 6-zone anatomical petting map. Zones are resolved against the *rendered*
+ * 7-zone anatomical petting map (the scruff is where you pick a cat up). Zones are resolved against the *rendered*
  * geometry of the current frame (head circle, paw positions, tail chain, torso
  * outline and spine normals), so they follow the cat through every pose — even
  * belly-up, where back and belly swap sides.
@@ -7,7 +7,7 @@
 import { distToSegment, pointInPolygon, type Vec2 } from '../shared/math';
 import type { Landmarks } from '../engine/ArticulatedCatRenderer';
 
-export const PET_ZONES = ['CHIN_CHEEKS', 'CROWN_EARS', 'BACK_BASE_OF_TAIL', 'FRONT_PAWS', 'BELLY', 'TAIL'] as const;
+export const PET_ZONES = ['CHIN_CHEEKS', 'CROWN_EARS', 'SCRUFF', 'BACK_BASE_OF_TAIL', 'FRONT_PAWS', 'BELLY', 'TAIL'] as const;
 export type PetZone = (typeof PET_ZONES)[number];
 
 export interface ZoneResponse {
@@ -20,6 +20,7 @@ export interface ZoneResponse {
 export const ZONE_EFFECTS: Record<PetZone, ZoneResponse> = {
   CHIN_CHEEKS: { affection: 5.5, irritation: -2 },
   CROWN_EARS: { affection: 4, irritation: -1 },
+  SCRUFF: { affection: 3.5, irritation: -0.5 },
   BACK_BASE_OF_TAIL: { affection: 5, irritation: -0.5 },
   FRONT_PAWS: { affection: 0.4, irritation: 1.2 },
   BELLY: { affection: 1.5, irritation: 3.5 },
@@ -36,6 +37,8 @@ export function classifyZone(px: number, py: number, lm: Landmarks): PetZone | n
   if (hd < lm.head.r * 1.12 || (along > 0.6 && along < 1.9 && hd < lm.head.r * 1.9)) {
     return along > 0.2 ? 'CROWN_EARS' : 'CHIN_CHEEKS';
   }
+  // Scruff: the loose skin on the nape, just behind the ears and above the shoulders.
+  if (lm.scruff && Math.hypot(px - lm.scruff.x, py - lm.scruff.y) < 7.5 * s) return 'SCRUFF';
   // Front paws.
   for (const paw of lm.paws) {
     if (Math.hypot(px - paw.x, py - paw.y) < 7.5 * s) return 'FRONT_PAWS';

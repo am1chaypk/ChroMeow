@@ -7,6 +7,8 @@
  *  • One-way platforms: cats pass up through ledges and land on their top edge
  *    only while descending.
  *  • Platform list utilities (pure functions, unit-tested).
+ *  • The scruff pendulum: a held cat's body swings under the hand with a damped
+ *    spring and settles straight down when the hand is still.
  */
 import { clamp } from '../shared/math';
 
@@ -46,6 +48,8 @@ export interface PlatformSource {
   get(id: string): Platform | null;
   floor(): Platform;
   bounds(): WorldBounds;
+  /** Document scroll position, when the source is a real scrolling page. */
+  scrollOffset?(): { x: number; y: number };
 }
 
 export interface JumpPlan {
@@ -223,4 +227,54 @@ export function makeFloor(bounds: WorldBounds, inset = 2): Platform {
     tag: 'viewport',
     elementRef: null,
   };
+}
+
+/* ------------------------------------------------------------ scruff hold */
+
+/** Largest swing either side of vertical while held (radians). */
+export const PENDULUM_MAX_ANGLE = 0.65;
+/** Hand speed (px per 60 Hz frame) → target swing angle. */
+export const PENDULUM_GAIN = 0.045;
+/** Spring stiffness (1/s²) and damping (1/s): ω ≈ 6.2 rad/s, ζ ≈ 0.6 — a couple of soft sways, then still. */
+export const PENDULUM_K = 38;
+export const PENDULUM_C = 7.5;
+
+export interface PendulumState {
+  /** Swing angle from vertical (+ = the body swings out to the right). */
+  angle: number;
+  angVel: number;
+}
+
+/** Where the body wants to hang for a given horizontal hand speed: it trails the motion. */
+export function pendulumTarget(handVxPerFrame: number): number {
+  return clamp(-handVxPerFrame * PENDULUM_GAIN, -PENDULUM_MAX_ANGLE, PENDULUM_MAX_ANGLE);
+}
+
+/** One spring-damper step toward the target swing; the angle is always kept within ±PENDULUM_MAX_ANGLE. */
+export function pendulumStep(s: PendulumState, handVxPerFrame: number, dt: number): PendulumState {
+  if (dt <= 0) return s;
+  const target = pendulumTarget(handVxPerFrame);
+  // Sub-step for stability at low frame rates.
+  const n = Math.max(1, Math.ceil(dt / (1 / 120)));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    s.angVel += (PENDULUM_K * (target - s.angle) - PENDULUM_C * s.angVel) * h;
+    s.angle += s.angVel * h;
+    if (s.angle > PENDULUM_MAX_ANGLE || s.angle < -PENDULUM_MAX_ANGLE) {
+      s.angle = clamp(s.angle, -PENDULUM_MAX_ANGLE, PENDULUM_MAX_ANGLE);
+      s.angVel = 0;
+    }
+  }
+  return s;
+}
+
+/** Throw speeds are capped so a flick never launches a cat into orbit (px/s). */
+export const MAX_THROW_VX = 1200;
+export const MAX_THROW_UP = 1100;
+export const MAX_THROW_DOWN = 1200;
+
+export function clampThrow(vx: number, vy: number): { vx: number; vy: number } {
+  const fx = Number.isFinite(vx) ? vx : 0;
+  const fy = Number.isFinite(vy) ? vy : 0;
+  return { vx: clamp(fx, -MAX_THROW_VX, MAX_THROW_VX), vy: clamp(fy, -MAX_THROW_UP, MAX_THROW_DOWN) };
 }

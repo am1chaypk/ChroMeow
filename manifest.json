@@ -3,7 +3,7 @@
   "name": "ChroMeow",
   "short_name": "ChroMeow",
   "version": "1.0.0",
-  "description": "Two (or up to six) lifelike cats that live, climb, nap and play on the pages you browse. 100% local. Zero network. Zero telemetry.",
+  "description": "Alex & Anna: lifelike cats that live, climb, eat, nap and play on the pages you browse. 100% local. Zero network. Zero telemetry.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
@@ -28,7 +28,7 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["storage", "unlimitedStorage"],
+  "permissions": ["storage", "unlimitedStorage", "idle"],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

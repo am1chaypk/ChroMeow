@@ -11,7 +11,7 @@
  * without a DOM. Nothing ever leaves the machine.
  */
 import { clamp, clamp01 } from '../shared/math';
-import { mixHex, rgbToHex, rgbToHsl, rgbToLab, shadeHex, type RGB } from '../shared/color';
+import { hexToRgb, mixHex, rgbToHex, rgbToHsl, rgbToLab, shadeHex, type RGB } from '../shared/color';
 import { Rng } from '../shared/rng';
 import type { CoatPalette } from '../shared/types';
 
@@ -345,4 +345,25 @@ export function analyzePhoto(pixels: PixelSource, k = 7): { clusters: ColorClust
   const pts = samplePixels(pixels, 4500, 11, 0.8);
   const clusters = kMeans(pts, k, 5, 16);
   return { clusters, suggestion: suggestPalette(clusters), contrast: contrastSpread(clusters) };
+}
+
+/** True for a warm, clearly amber / rufous colour (a real orange patch, not beige or brown). */
+export function isWarmAmber(hex: string): boolean {
+  const { h, s, l } = rgbToHsl(hexToRgb(hex));
+  return h >= 12 && h <= 42 && s >= 0.42 && l >= 0.3 && l <= 0.72;
+}
+
+/**
+ * Merges photo-derived colours into a cat's palette without losing its signature
+ * markings: markings (Alex's white saddle band, flank patch, blaze…) are never
+ * touched, and while the flank patch is switched on its amber and the rufous
+ * undertone only change to another genuinely warm amber.
+ */
+export function mergePalette(current: { palette: CoatPalette; markings: { flankPatch: boolean } }, patch: Partial<CoatPalette>): CoatPalette {
+  const next: CoatPalette = { ...current.palette, ...patch };
+  if (current.markings.flankPatch) {
+    if (patch.flankPatch && !isWarmAmber(patch.flankPatch)) next.flankPatch = current.palette.flankPatch;
+    if (patch.rufus && !isWarmAmber(patch.rufus)) next.rufus = current.palette.rufus;
+  }
+  return next;
 }

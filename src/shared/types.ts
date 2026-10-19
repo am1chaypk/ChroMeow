@@ -51,13 +51,15 @@ export interface CoatMarkings {
   blazeWidth: number;
   /** Edge softness of the blaze. */
   blazeSoftness: number;
+  /** 0 = mirror-symmetrical blaze, 1 = one side reaches much further across the cheek (Alex). */
+  blazeAsymmetry: number;
   /** How high the blaze climbs up the forehead. */
   blazeHeight: number;
-  /** Cat 1's white band cutting across the shoulders ("broken saddle"). */
+  /** White band crossing the back behind the shoulders — a "broken saddle" (Alex). */
   shoulderBand: boolean;
-  /** Golden blotch on the lower flank where tabby meets white. */
+  /** Warm rufous / amber blotch on the lower flank where tabby meets white (Alex). */
   flankPatch: boolean;
-  /** Cat 2's small white crest dipping up near the rump. */
+  /** Small white crest dipping up from the belly near the rump. */
   rumpCrest: boolean;
   /** Cleopatra eyeliner intensity. */
   eyeliner: number;
@@ -123,6 +125,30 @@ export interface SignatureBehaviors {
   widePawSplay: boolean;
 }
 
+/**
+ * Individual quirks that go beyond the 0..1 personality weights: appetite,
+ * favourite petting spots, how expressive the ears are and who the cat is
+ * bonded with.
+ */
+export interface CatTraits {
+  /** Multiplies how fast hunger builds (1 = average cat). */
+  hungerRateMultiplier: number;
+  /** Multiplies how fast thirst builds. */
+  thirstRateMultiplier: number;
+  /** 0..1 baseline urge to play and hunt the cursor. */
+  playfulness: number;
+  /** Multiplies the affection gained from head, chin and back strokes. */
+  pettingAffinity: number;
+  /** 0..1 how quickly ears flatten into "airplane ears" when annoyed or overstimulated. */
+  earExpressiveness: number;
+  /** 0..1 how often this cat starts grooming / cuddling its partner. */
+  socialInitiative: number;
+  /** 0..1 love of sprawling out and long front-paw stretches. */
+  sprawlLover: number;
+  /** Profile id of the cat this one is bonded with (prefers it for cuddles), or ''. */
+  bondedWith: string;
+}
+
 export interface SpriteAnimationDef {
   row: number;
   frames: number;
@@ -162,6 +188,7 @@ export interface CatProfile {
   morphology: Morphology;
   personality: Personality;
   signature: SignatureBehaviors;
+  traits: CatTraits;
   /** Painted overlay on the 512×512 UV atlas (PNG data URL) or null. */
   paintMask: string | null;
   renderMode: RenderMode;
@@ -185,6 +212,8 @@ export interface Settings {
   showNameTags: boolean;
   /** Lowers activity (fewer zoomies, slower frame rate) — also auto-on with prefers-reduced-motion. */
   calmMode: boolean;
+  /** Seconds without mouse / keyboard input before the cats curl up together (30..1800). */
+  idleThreshold: number;
 }
 
 export interface Drives {
@@ -194,6 +223,10 @@ export interface Drives {
   curiosity: number;
   irritation: number;
   socialNeed: number;
+  /** 0..100, rises over time (faster when active); eating brings it down. */
+  hunger: number;
+  /** 0..100, rises over time (faster when active); drinking brings it down. */
+  thirst: number;
 }
 
 export const DRIVE_KEYS: readonly (keyof Drives)[] = [
@@ -203,7 +236,22 @@ export const DRIVE_KEYS: readonly (keyof Drives)[] = [
   'curiosity',
   'irritation',
   'socialNeed',
+  'hunger',
+  'thirst',
 ];
+
+/** The food & water station on the viewport floor (shared by all tabs). */
+export interface FeedingStation {
+  enabled: boolean;
+  /** Horizontal position of the station's centre along the viewport floor, 0..1. */
+  xNormalized: number;
+  /** 0..100 */
+  foodLevel: number;
+  /** 0..100 */
+  waterLevel: number;
+}
+
+export type BowlKind = 'food' | 'water';
 
 /** The canonical, tab-independent state of one cat (kept by the service worker). */
 export interface CatRuntimeSnapshot {

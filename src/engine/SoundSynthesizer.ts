@@ -7,7 +7,10 @@
  *  • meow   — sawtooth source through two moving formant filters ("mee-ow")
  *  • trill  — chirrupy rolled-R greeting (vibrato FM)
  *  • chirp  — short hunting chatter
- *  • mrrp   — tiny questioning blip when booped
+ *  • mrrp   — tiny questioning blip when booped (and the soft chirrup on pickup)
+ *  • crunch — kibble being chewed (short band-passed noise clicks)
+ *  • lap    — a tongue lapping water
+ *  • pour   — kibble rattling into the bowl / water filling it
  */
 import { clamp } from '../shared/math';
 
@@ -269,5 +272,85 @@ export class SoundSynthesizer {
     osc.connect(f).connect(g).connect(this.master);
     osc.start(t);
     osc.stop(t + 0.22);
+  }
+
+  /** One bite of kibble: two or three short, bright noise clicks. */
+  crunch(): void {
+    const ctx = this.ready();
+    if (!ctx || !this.master || !this.noise) return;
+    const t = ctx.currentTime;
+    const n = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) this.grain(ctx, t + i * 0.045 + Math.random() * 0.02, 1800 + Math.random() * 1600, 2.5, 0.05 + Math.random() * 0.04, 0.035);
+  }
+
+  /** A single lap of water: a tiny wet "plip". */
+  lap(): void {
+    const ctx = this.ready();
+    if (!ctx || !this.master) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(950 + Math.random() * 200, t);
+    osc.frequency.exponentialRampToValueAtTime(520, t + 0.05);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.07);
+  }
+
+  /** Refill: kibble rattling into the bowl, or water pouring in. */
+  pour(kind: 'food' | 'water'): void {
+    const ctx = this.ready();
+    if (!ctx || !this.master || !this.noise) return;
+    const t = ctx.currentTime;
+    if (kind === 'food') {
+      for (let i = 0; i < 26; i++) {
+        const at = t + Math.pow(Math.random(), 1.4) * 0.7;
+        this.grain(ctx, at, 2200 + Math.random() * 2400, 4, 0.03 + Math.random() * 0.05, 0.03);
+      }
+      return;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(700, t);
+    bp.frequency.linearRampToValueAtTime(1500, t + 0.8);
+    const gurgle = ctx.createOscillator();
+    gurgle.frequency.value = 11;
+    const gd = ctx.createGain();
+    gd.gain.value = 260;
+    gurgle.connect(gd).connect(bp.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.08);
+    g.gain.setValueAtTime(0.22, t + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+    gurgle.start(t);
+    src.stop(t + 1);
+    gurgle.stop(t + 1);
+  }
+
+  private grain(ctx: AudioContext, at: number, freq: number, q: number, gain: number, dur: number): void {
+    if (!this.master || !this.noise) return;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(gain, at + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(at, Math.random() * 1.5);
+    src.stop(at + dur + 0.01);
   }
 }

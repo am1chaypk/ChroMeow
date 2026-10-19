@@ -3,7 +3,11 @@
  *
  * The first 28 entries are the core ethogram from the master spec; the rest are
  * the extended reaction, social and signature states (including the six
- * photo-derived signature postures of the two default cats).
+ * photo-derived signature postures of Alex and Anna), followed by the v2 states
+ * for being picked up, the food & water station and the idle cuddle.
+ *
+ * New states are only ever appended, so sprite sheets baked with the 49-state
+ * ChroMeow HD layout keep their row order.
  */
 export const CORE_STATES = [
   // Rest & wake chain
@@ -66,7 +70,18 @@ export const EXTENDED_STATES = [
   'LEDGE_CHIN_REST',
   'WIDE_PAW_SPLAY',
   'JUDGMENTAL_AIRPLANE_SQUINT',
+  // v2: held by the scruff, the food & water station and the idle cuddle
+  'SCRUFF_HELD',
+  'SEEKING_FOOD',
+  'EATING',
+  'SEEKING_WATER',
+  'DRINKING',
+  'EMPTY_BOWL_WAIT',
+  'CUDDLE_SLEEP',
 ] as const;
+
+/** Number of states in the original ChroMeow HD sprite layout (one row each). */
+export const LEGACY_HD_STATE_COUNT = 49;
 
 export const ALL_STATES = [...CORE_STATES, ...EXTENDED_STATES] as const;
 
@@ -84,6 +99,7 @@ export const SLEEP_STATES: ReadonlySet<CatState> = new Set<CatState>([
   'TANDEM_BELLY_HOLD_SLEEP',
   'PILLOW_STACK_CUDDLE',
   'YIN_YANG_CUDDLE_SLEEP',
+  'CUDDLE_SLEEP',
 ]);
 
 export const AIRBORNE_STATES: ReadonlySet<CatState> = new Set<CatState>([

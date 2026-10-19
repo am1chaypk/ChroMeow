@@ -87,6 +87,8 @@ export interface Landmarks {
   roll: number;
   scale: number;
   backTop: Vec2;
+  /** The nape / scruff (top of the neck behind the ears), where a hand picks the cat up. */
+  scruff: Vec2;
 }
 
 export interface DrawOptions {
@@ -352,7 +354,9 @@ function rgbStr(c: [number, number, number], k = 1): string {
 
 export class ArticulatedCatRenderer {
   profile: CatProfile;
-  private tex: CoatTexture;
+  /** Built lazily on first use, so the rig (skeleton, landmarks) also works without a canvas (tests). */
+  private texCache: CoatTexture | null = null;
+  private texKey = '';
   private paintKey = '';
   private chonkK = 1;
   private furF = 1;
@@ -369,9 +373,18 @@ export class ArticulatedCatRenderer {
 
   constructor(profile: CatProfile) {
     this.profile = profile;
-    this.tex = buildCoatTexture(profile, null);
+    this.texKey = coatKey(profile);
     this.applyMorph();
     this.ready = this.loadPaint();
+  }
+
+  private get tex(): CoatTexture {
+    if (!this.texCache) this.texCache = buildCoatTexture(this.profile, null);
+    return this.texCache;
+  }
+
+  private set tex(t: CoatTexture) {
+    this.texCache = t;
   }
 
   get texture(): CoatTexture {
@@ -379,11 +392,12 @@ export class ArticulatedCatRenderer {
   }
 
   setProfile(profile: CatProfile): void {
-    const changed = coatKey(profile) !== this.tex.key;
+    const changed = coatKey(profile) !== this.texKey;
     this.profile = profile;
     this.applyMorph();
     if (changed) {
-      this.tex = buildCoatTexture(profile, null);
+      this.texKey = coatKey(profile);
+      this.texCache = null;
       this.ready = this.loadPaint();
     }
   }
@@ -548,6 +562,19 @@ export class ArticulatedCatRenderer {
       dBody: d,
       roll,
     };
+  }
+
+  /**
+   * Local-space scruff (dorsal side of the neck base) and the point that hangs
+   * straight below it when the cat is held up by it: the hips, so the spine
+   * hangs (nearly) vertical, as a scruffed cat's does.
+   */
+  scruffLocal(skel: Skeleton): { scruff: Vec2; com: Vec2 } {
+    const nb = skel.neck[1];
+    const scruff = { x: nb.x - nb.nx * nb.top * 0.92, y: nb.y - nb.ny * nb.top * 0.92 };
+    const hip = skel.torso[Math.floor(skel.torso.length * 0.18)];
+    const mid = skel.torso[Math.floor(skel.torso.length * 0.45)];
+    return { scruff, com: { x: (hip.x * 2 + mid.x) / 3, y: (hip.y * 2 + mid.y) / 3 } };
   }
 
   /** World-space anchor + base angle for the Verlet tail. */
@@ -1700,7 +1727,9 @@ export class ArticulatedCatRenderer {
     }
     const mid = skel.torso[Math.floor(skel.torso.length / 2)];
     const backTop = w(mid.x - mid.nx * mid.top, mid.y - mid.ny * mid.top);
-    return { head: { x: hc.x, y: hc.y, r: skel.head.r * scale }, headUp, paws, torsoPoly, spine, spineNormals, tail: tailPts, hull, bounds: { minX, minY, maxX, maxY }, roll: skel.roll, scale, backTop };
+    const sl = this.scruffLocal(skel).scruff;
+    const scruff = w(sl.x, sl.y);
+    return { head: { x: hc.x, y: hc.y, r: skel.head.r * scale }, headUp, paws, torsoPoly, spine, spineNormals, tail: tailPts, hull, bounds: { minX, minY, maxX, maxY }, roll: skel.roll, scale, backTop, scruff };
   }
 }
 

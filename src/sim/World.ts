@@ -1,11 +1,20 @@
 /**
  * World — runs the shared simulation: all cats, the social coordinator, toys,
- * particles and pointer interaction. DOM-agnostic: the content script feeds it
- * the real page (DomPlatformScanner) while Cat Studio feeds it a mock page.
+ * the food & water station, particles and pointer interaction. DOM-agnostic: the
+ * content script feeds it the real page (DomPlatformScanner) while Cat Studio
+ * feeds it a mock page.
+ *
+ * Pointer: hovering pets; a press that drags more than 5 px (or a press right on
+ * the scruff) picks the cat up, and letting go drops or throws it.
  */
 import type { CatState } from '../shared/catStates';
 import { clamp, clamp01, dist } from '../shared/math';
-import type { CatProfile, Settings, WorldSnapshot } from '../shared/types';
+import type { BowlKind, CatProfile, FeedingStation, Settings, WorldSnapshot } from '../shared/types';
+import { DEFAULT_STATION } from '../shared/storage';
+import { displayName } from '../shared/i18n';
+import { mixHex } from '../shared/color';
+import { releaseVelocity, type MotionSample } from './ToyTool';
+import { StationModel, type StationHit } from './FeedingStation';
 import { SocialCoordinator } from '../ai/SocialCoordinator';
 import { classifyZone, onCat, type PetZone } from '../ai/HitboxZones';
 import type { IntentKind } from '../ai/UtilityBrain';
@@ -100,7 +109,18 @@ export interface WorldOptions {
   settings: Settings;
   /** Hostname-independent local clock offset (studio uses real time too). */
   clock?: () => number;
+  /** Initial food & water station state. */
+  station?: FeedingStation;
 }
+
+/** Callbacks the host page uses to lock the pointer while a cat is held. */
+export interface WorldHooks {
+  grabStart?(agent: CatAgent): void;
+  grabEnd?(agent: CatAgent): void;
+}
+
+/** Press-and-drag distance (px) that turns a press on a cat into picking it up. */
+export const GRAB_DISTANCE = 5;
 
 export class World {
   agents: CatAgent[] = [];
@@ -120,11 +140,23 @@ export class World {
   private dragDistance = 0;
   private envCache: AgentEnv | null = null;
   interactive = true;
+  readonly station: StationModel;
+  hooks: WorldHooks = {};
+  /** The cat currently held by the scruff (locked until the button is released). */
+  held: CatAgent | null = null;
+  private grabSamples: MotionSample[] = [];
+  private grabVel = { x: 0, y: 0 };
+  /** Mouse / keyboard away for longer than the idle threshold. */
+  userIdle = false;
+  private lastScroll: { x: number; y: number } | null = null;
+  /** Studio "trigger SCRUFF_HELD": a scripted hand. */
+  private demoHold: { agent: CatAgent; t: number; x: number; y: number } | null = null;
 
   constructor(opts: WorldOptions) {
     this.source = opts.source;
     this.sound = opts.sound;
     this.settings = opts.settings;
+    this.station = new StationModel(opts.station ?? DEFAULT_STATION);
   }
 
   get calm(): boolean {
@@ -178,6 +210,8 @@ export class World {
       calm: this.settings.calmMode,
       hour: d.getHours() + d.getMinutes() / 60,
       social: this.social,
+      station: this.station.enabled ? this.station : null,
+      userIdle: this.userIdle,
     };
     this.envCache = env;
     return env;
@@ -188,8 +222,22 @@ export class World {
     this.now += h;
     this.platforms = allPlatforms(this.source);
     this.cursor.update(this.now);
+    this.station.scale = clamp(this.settings.catScale, 0.6, 1.6);
+    this.station.update(h, this.now);
     const env = this.env();
+    // Page scrolled since last frame: cats riding page elements move with them *before* physics.
+    const sc = this.source.scrollOffset?.();
+    if (sc) {
+      if (this.lastScroll && (sc.x !== this.lastScroll.x || sc.y !== this.lastScroll.y)) {
+        const dx = sc.x - this.lastScroll.x;
+        const dy = sc.y - this.lastScroll.y;
+        for (const a of this.agents) a.shiftForScroll(dx, dy, env);
+      }
+      this.lastScroll = { x: sc.x, y: sc.y };
+    }
     this.toys.update(h, this.platforms, env.bounds);
+    if (this.demoHold) this.stepDemoHold(h);
+    if (this.held) this.held.holdMove(this.cursor.x, this.cursor.y, this.grabVel.x, this.grabVel.y);
     for (const a of this.agents) a.update(h, env);
     this.social.update(this.agents, env);
     this.particles.update(h);
@@ -197,6 +245,7 @@ export class World {
 
   /** True when nothing much is happening (lets the overlay throttle its frame rate). */
   isDrowsy(): boolean {
+    if (this.held) return false;
     if (this.toys.count > 0 || this.particles.count > 8) return false;
     if (this.cursor.present && this.cursor.idle(this.now) < 1) return false;
     return this.agents.every((a) => a.isAsleep() && !a.isPetted());
@@ -205,14 +254,28 @@ export class World {
   render(ctx: AnyCtx): Rect[] {
     const env = this.envCache ?? this.env();
     const rects: Rect[] = [];
+    if (this.station.enabled) {
+      this.station.drawBack(ctx, env.bounds, this.now);
+      rects.push(this.station.rect(env.bounds));
+    }
     const toyR = this.toys.draw(ctx);
     if (toyR) rects.push(toyR);
-    // Sleepers first, then by vertical position so cats in front overlap correctly.
-    const order = [...this.agents].sort((a, b) => a.y - b.y || (a.isAsleep() ? -1 : 1));
-    for (const a of order) {
-      const lm = a.draw(ctx, env);
-      if (lm) rects.push({ minX: lm.bounds.minX - 12, minY: lm.bounds.minY - 14, maxX: lm.bounds.maxX + 12, maxY: lm.bounds.maxY + 12 });
-    }
+    // Sleepers first, then by vertical position so cats in front overlap correctly; a held cat is on top.
+    const order = [...this.agents].sort(
+      (a, b) => (a.isHeld() ? 1 : 0) - (b.isHeld() ? 1 : 0) || a.y - b.y || (a.isAsleep() ? 0 : 1) - (b.isAsleep() ? 0 : 1) || a.poseRole - b.poseRole,
+    );
+    // Depth around the bowls: a cat eating or drinking is drawn *behind* the bowls' front walls (its
+    // muzzle dips into the bowl); every other cat walks or sits in front of them.
+    const atBowl = (a: CatAgent) => a.state === 'EATING' || a.state === 'DRINKING';
+    const layers = [order.filter(atBowl), order.filter((a) => !atBowl(a))];
+    layers.forEach((layer, i) => {
+      if (i === 1 && this.station.enabled) this.station.drawFront(ctx, env.bounds);
+      for (const a of layer) {
+        const lm = a.draw(ctx, env);
+        if (lm) rects.push({ minX: lm.bounds.minX - 12, minY: lm.bounds.minY - 14, maxX: lm.bounds.maxX + 12, maxY: lm.bounds.maxY + 12 });
+        if (a.isHeld() && lm) drawScruffPinch(ctx, lm.scruff, a);
+      }
+    });
     if (this.settings.showNameTags && this.hovered?.lm) rects.push(this.drawNameTag(ctx, this.hovered));
     const pr = this.particles.draw(ctx);
     if (pr) rects.push(pr);
@@ -221,7 +284,7 @@ export class World {
 
   private drawNameTag(ctx: AnyCtx, a: CatAgent): Rect {
     const lm = a.lm as NonNullable<CatAgent['lm']>;
-    const name = a.profile.name || 'Cat';
+    const name = displayName(a.profile) || 'Cat';
     ctx.save();
     ctx.font = '600 12px ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif';
     ctx.direction = /[֐-׿]/.test(name) ? 'rtl' : 'ltr';
@@ -257,8 +320,16 @@ export class World {
     this.lastPointerT = tSeconds;
     if (this.pressedOn) this.dragDistance += Math.hypot(x - this.cursor.x, y - this.cursor.y);
     this.cursor.move(x, y, this.now);
+    if (this.held) {
+      this.trackGrab(x, y, tSeconds);
+      return;
+    }
     if (!this.interactive) {
       this.hovered = null;
+      return;
+    }
+    if (this.pressedOn && this.dragDistance > GRAB_DISTANCE && !this.pressedOn.isAirborne() && !this.pressedOn.isClimbing()) {
+      this.startGrab(this.pressedOn, x, y, tSeconds);
       return;
     }
     this.hovered = this.hitTest(x, y);
@@ -275,21 +346,130 @@ export class World {
     this.hovered = null;
   }
 
-  pointerDown(x: number, y: number): boolean {
+  pointerDown(x: number, y: number, tSeconds = this.lastPointerT): boolean {
     this.cursor.down = true;
     this.sound?.unlock();
     if (!this.interactive) return false;
+    if (this.held) return true;
+    this.cursor.move(x, y, this.now);
     this.pressedOn = this.hitTest(x, y);
     this.dragDistance = 0;
+    // A press right on the scruff picks the cat up straight away.
+    if (this.pressedOn && this.zoneAt(this.pressedOn, x, y) === 'SCRUFF' && !this.pressedOn.isAirborne() && !this.pressedOn.isClimbing()) {
+      this.startGrab(this.pressedOn, x, y, tSeconds);
+    }
     return !!this.pressedOn;
   }
 
   pointerUp(x: number, y: number): void {
     this.cursor.down = false;
+    if (this.held) {
+      this.endGrab(true);
+      this.pressedOn = null;
+      return;
+    }
     const a = this.pressedOn;
     this.pressedOn = null;
     if (!a || !this.interactive) return;
     if (this.dragDistance < 6 && this.hitTest(x, y) === a) a.poke(this.zoneAt(a, x, y), this.envCache ?? this.env());
+  }
+
+  /** The pointer was cancelled or the window lost focus: set a held cat down gently. */
+  pointerCancel(): void {
+    this.cursor.down = false;
+    this.pressedOn = null;
+    if (this.held) this.endGrab(false);
+  }
+
+  private startGrab(a: CatAgent, x: number, y: number, t: number): void {
+    const env = this.envCache ?? this.env();
+    const s = this.social.sessionOf(a);
+    if (s) this.social.end(s);
+    a.grab(x, y, env);
+    this.held = a;
+    this.hovered = null;
+    this.grabSamples = [{ x, y, t }];
+    this.grabVel = { x: 0, y: 0 };
+    this.hooks.grabStart?.(a);
+  }
+
+  private trackGrab(x: number, y: number, t: number): void {
+    this.grabSamples.push({ x, y, t });
+    while (this.grabSamples.length > 2 && t - this.grabSamples[0].t > 0.25) this.grabSamples.shift();
+    const v = releaseVelocity(this.grabSamples, 0.09);
+    // Smooth the hand speed a little so the swing follows the gesture, not the jitter.
+    this.grabVel.x += (v.vx - this.grabVel.x) * 0.5;
+    this.grabVel.y += (v.vy - this.grabVel.y) * 0.5;
+  }
+
+  private endGrab(withThrow: boolean): void {
+    const a = this.held;
+    if (!a) return;
+    this.held = null;
+    const last = this.grabSamples[this.grabSamples.length - 1];
+    // A hand that stopped before letting go doesn't throw.
+    const stale = !last || this.lastPointerT - last.t > 0.12;
+    const v = withThrow && !stale ? releaseVelocity(this.grabSamples, 0.09) : { vx: 0, vy: 0 };
+    a.release(v.vx, v.vy, this.envCache ?? this.env());
+    this.grabSamples = [];
+    this.hooks.grabEnd?.(a);
+  }
+
+  private stepDemoHold(dt: number): void {
+    const d = this.demoHold as NonNullable<World['demoHold']>;
+    if (this.held !== d.agent) {
+      this.demoHold = null;
+      return;
+    }
+    d.t += dt;
+    const lift = Math.min(1, d.t / 0.45);
+    const x = d.x + Math.sin(Math.max(0, d.t - 0.45) * 2.4) * 46 * (d.t < 2.6 ? 1 : 0.4);
+    const y = d.y - 70 * lift * (1 - lift * 0.15);
+    const prev = this.grabSamples[this.grabSamples.length - 1];
+    this.cursor.x = x;
+    this.cursor.y = y;
+    this.trackGrab(x, y, this.now);
+    if (prev && dt > 0) this.grabVel.x = (x - prev.x) / dt;
+    if (d.t > 3.2) {
+      this.demoHold = null;
+      this.held = null;
+      d.agent.release(0, 0, this.envCache ?? this.env());
+      this.grabSamples = [];
+      this.hooks.grabEnd?.(d.agent);
+    }
+  }
+
+  /* ------------------------------------------------------ food & water */
+
+  /** What the station has under a point (for the page's hitbox / cursor). */
+  stationHit(x: number, y: number): StationHit {
+    return this.station.hit(x, y, this.source.bounds());
+  }
+
+  /** Fills a bowl to the brim with a pour sound and a little burst. */
+  refill(kind: BowlKind): void {
+    const b = this.source.bounds();
+    this.station.refill(kind);
+    const g = this.station.geom(b);
+    const bowl = g.bowls[kind];
+    this.particles.emit(kind === 'food' ? 'kibble' : 'splash', bowl.x, bowl.rimY - 2, kind === 'food' ? 14 : 10, g.s);
+    this.sound?.unlock();
+    this.sound?.pour(kind);
+    // Anyone waiting by that bowl reconsiders right away.
+    for (const a of this.agents) if (a.planLabel === `beg-${kind}`) a.clearPlan();
+  }
+
+  setStation(next: FeedingStation): void {
+    this.station.setState(next);
+  }
+
+  /** Mouse / keyboard idle state changed (from the page or the browser). */
+  setUserIdle(idle: boolean): void {
+    if (idle === this.userIdle) return;
+    this.userIdle = idle;
+    const env = this.envCache ?? this.env();
+    if (idle) this.social.startIdleGather(this.agents, env);
+    else this.social.wakeFromIdle(this.agents, env);
   }
 
   /* ----------------------------------------------------------- actions */
@@ -399,6 +579,33 @@ export class World {
     for (const s of [...this.social.sessions]) if (s.a === agent || s.b === agent) this.social.end(s);
     const fn = social[state];
     if (fn && fn()) return;
+    if (state === 'CUDDLE_SLEEP') {
+      if (partner && this.social.startIdleGather([agent, partner], env)) return;
+    }
+    if (state === 'SCRUFF_HELD') {
+      // Studio demo: an invisible hand lifts the cat by the scruff, sways it, and sets it down.
+      const lm = agent.lm;
+      if (lm && !agent.isAirborne()) {
+        this.demoHold = { agent, t: 0, x: lm.scruff.x, y: lm.scruff.y };
+        this.startGrab(agent, lm.scruff.x, lm.scruff.y, this.now);
+      }
+      return;
+    }
+    const meals: Partial<Record<CatState, BowlKind>> = { SEEKING_FOOD: 'food', EATING: 'food', SEEKING_WATER: 'water', DRINKING: 'water', EMPTY_BOWL_WAIT: 'food' };
+    const bowl = meals[state];
+    if (bowl) {
+      this.station.state.enabled = true;
+      const key = bowl === 'food' ? 'hunger' : 'thirst';
+      if (state === 'EMPTY_BOWL_WAIT') {
+        this.station.consume('food', 100);
+        agent.drives.hunger = Math.max(agent.drives.hunger, 90);
+        agent.lastBegEnd = -999;
+      } else {
+        if (this.station.level(bowl) < 40) this.station.refill(bowl);
+        agent.drives[key] = Math.max(agent.drives[key], 82);
+      }
+      if (agent.planMeal(bowl, env)) return;
+    }
     const intents: Partial<Record<CatState, IntentKind>> = {
       ZOOMIES_SPRINT: 'zoomies',
       WALL_CLIMB: 'climb',
@@ -462,4 +669,46 @@ export class World {
     for (const a of this.agents) a.dispose(this.envCache);
     this.agents = [];
   }
+}
+
+/** A little gathered tuft of fur where the hand pinches the scruff (the skin lifts into a small peak). */
+function drawScruffPinch(ctx: AnyCtx, p: { x: number; y: number }, a: CatAgent): void {
+  const s = a.S;
+  const pal = a.profile.palette;
+  const light = mixHex(pal.tabbyBase, '#FFFFFF', 0.35);
+  ctx.save();
+  ctx.lineCap = 'round';
+  // Lifted skin: a soft fur-coloured peak under the fingers.
+  ctx.fillStyle = pal.tabbyBase;
+  ctx.globalAlpha = 0.95;
+  ctx.beginPath();
+  ctx.moveTo(p.x - 6 * s, p.y + 5 * s);
+  ctx.quadraticCurveTo(p.x - 2 * s, p.y + 1 * s, p.x, p.y - 2.5 * s);
+  ctx.quadraticCurveTo(p.x + 2 * s, p.y + 1 * s, p.x + 6 * s, p.y + 5 * s);
+  ctx.closePath();
+  ctx.fill();
+  // Hairs gathered toward the pinch point.
+  for (let i = 0; i < 9; i++) {
+    const f = i / 8 - 0.5;
+    const bx = p.x + f * 11 * s;
+    const by = p.y + 5 * s + Math.abs(f) * 2.5 * s;
+    ctx.strokeStyle = i % 3 === 1 ? pal.tabbyStripe : i % 3 === 2 ? light : pal.tabbyBase;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = Math.max(0.9, 1.3 * s);
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.quadraticCurveTo(bx - f * 2.5 * s, by - 4 * s, p.x + f * 1.8 * s, p.y - 2.6 * s);
+    ctx.stroke();
+  }
+  // Fold shadows either side of the lifted skin.
+  ctx.globalAlpha = 0.3;
+  ctx.strokeStyle = '#2A1F18';
+  ctx.lineWidth = Math.max(0.8, 1 * s);
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(p.x + side * 1.5 * s, p.y + 1 * s);
+    ctx.quadraticCurveTo(p.x + side * 4 * s, p.y + 4 * s, p.x + side * 7 * s, p.y + 6.5 * s);
+    ctx.stroke();
+  }
+  ctx.restore();
 }

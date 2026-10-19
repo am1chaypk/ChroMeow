@@ -8,7 +8,7 @@
  *    jumping, failed, waiting, running, review.
  * Import also accepts OpenPets V2 (8×11) and legacy 9×8 sheets.
  */
-import { ALL_STATES, type CatState } from '../shared/catStates';
+import { ALL_STATES, LEGACY_HD_STATE_COUNT, type CatState } from '../shared/catStates';
 import type { CatProfile, SpriteSheetData, SpriteSheetSource } from '../shared/types';
 import { bytesToDataUrl, createZip, readZip } from '../shared/zip';
 import { ArticulatedCatRenderer } from '../engine/ArticulatedCatRenderer';
@@ -209,13 +209,15 @@ export async function importSpriteFile(file: File, hint: ImportLayout = 'auto'):
     };
   }
   let layout = hint;
+  /** Rows an HD sheet of this size would have (one per state; v1 sheets have 49). */
+  const hdRows = H / (W / 8 / (CELL_W / CELL_H));
   if (layout === 'auto') {
     const ratio = H / W;
     const near = (v: number) => Math.abs(ratio - v) < 0.04;
     if (near(1664 / 1728)) layout = 'legacy-9x8';
     else if (near((9 * CELL_H) / (8 * CELL_W))) layout = 'openpets-v1';
     else if (near((11 * CELL_H) / (8 * CELL_W))) layout = 'openpets-v2';
-    else if (Math.abs((H / (W / 8 / (CELL_W / CELL_H))) - ALL_STATES.length) < 0.6) layout = 'chromeow-hd';
+    else if (Math.abs(hdRows - ALL_STATES.length) < 0.6 || Math.abs(hdRows - LEGACY_HD_STATE_COUNT) < 0.6) layout = 'chromeow-hd';
     else layout = 'openpets-v1';
   }
   let columns = 8;
@@ -228,7 +230,8 @@ export async function importSpriteFile(file: File, hint: ImportLayout = 'auto'):
     keys = OPENPETS_V2_ROWS;
     source = 'openpets-v2';
   } else if (layout === 'chromeow-hd') {
-    keys = ALL_STATES;
+    // Sheets baked before v2 have the first 49 states only (new states were appended).
+    keys = Math.abs(hdRows - LEGACY_HD_STATE_COUNT) < 0.6 ? ALL_STATES.slice(0, LEGACY_HD_STATE_COUNT) : ALL_STATES;
     source = 'chromeow-hd';
   } else {
     keys = OPENPETS_V1_ROWS;

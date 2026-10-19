@@ -11,9 +11,9 @@
  */
 import { isValidHex } from './color';
 import { clamp, clamp01 } from './math';
-import { MAX_CATS, normalizeProfile } from './presets';
+import { DEFAULT_TRAITS, MAX_CATS, normalizeProfile } from './presets';
 import { uid } from './rng';
-import { COAT_PATTERNS, type CatProfile, type CoatPattern, type SpriteAnimationDef, type SpriteSheetData } from './types';
+import { COAT_PATTERNS, type CatProfile, type CatTraits, type CoatPattern, type SpriteAnimationDef, type SpriteSheetData } from './types';
 
 export const CAT_FILE_FORMAT = 'chromeow-cats';
 export const CAT_FILE_VERSION = 1;
@@ -122,6 +122,15 @@ function sprite(raw: unknown): SpriteSheetData | null {
   };
 }
 
+const TRAIT_RANGES: Record<string, [number, number]> = { hungerRateMultiplier: [0.5, 2], thirstRateMultiplier: [0.5, 2], pettingAffinity: [0.5, 2] };
+
+function traits(raw: unknown): Partial<CatTraits> {
+  const out = pick(DEFAULT_TRAITS, raw, (key) => TRAIT_RANGES[key] ?? [0, 1]) as Partial<CatTraits>;
+  const bond = obj(raw).bondedWith;
+  out.bondedWith = typeof bond === 'string' && /^[\w-]{1,48}$/.test(bond) ? bond : '';
+  return out;
+}
+
 /** Rebuilds one cat from untrusted data on top of a factory template for `slot`. */
 export function sanitizeCat(raw: unknown, slot: number): CatProfile {
   const r = obj(raw);
@@ -145,6 +154,7 @@ export function sanitizeCat(raw: unknown, slot: number): CatProfile {
       morphology: { ...base.morphology, ...morphology },
       personality: { ...base.personality, ...pick(base.personality, r.personality, () => [0, 1]) },
       signature: { ...base.signature, ...pick(base.signature, r.signature, () => [0, 1]) },
+      traits: { ...DEFAULT_TRAITS, ...traits(r.traits) },
       paintMask: imageUrl(r.paintMask),
       renderMode: r.renderMode === 'sprite' ? 'sprite' : 'procedural',
       sprite: sprite(r.sprite),

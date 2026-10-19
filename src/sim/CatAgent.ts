@@ -9,29 +9,34 @@
  *                                         └► Verlet tail (world space)
  *
  * Petting, pokes, toys and social directives feed back into drives and plans.
+ *
+ * v2: a cat can be picked up by the scruff (SCRUFF_HELD: the nape is pinned to
+ * the cursor and the body hangs below it as a damped pendulum), thrown, and it
+ * walks to the food & water station when hungry or thirsty.
  */
 import type { CatState } from '../shared/catStates';
-import { clamp, clamp01, dist, noise1, smoothstep, type Vec2 } from '../shared/math';
+import { clamp, clamp01, dist, matApply, noise1, smoothstep, type Vec2 } from '../shared/math';
 import { Rng, hashString } from '../shared/rng';
-import type { CatProfile, CatRuntimeSnapshot, Drives } from '../shared/types';
+import type { BowlKind, CatProfile, CatRuntimeSnapshot, Drives } from '../shared/types';
 import { FelineFSM } from '../ai/FelineFSM';
 import { STATE_META, isAirborne, isLying, isSitting, isSleep } from '../ai/States';
-import { UtilityBrain, type BrainContext, type IntentKind } from '../ai/UtilityBrain';
-import { defaultDrives, driftDrives, updateDrives } from '../ai/Drives';
+import { EMPTY_BOWL, UtilityBrain, type BrainContext, type IntentKind } from '../ai/UtilityBrain';
+import { BEG_LEVEL, completeDrives, defaultDrives, driftDrives, updateDrives } from '../ai/Drives';
 import { ZONE_EFFECTS, type PetZone } from '../ai/HitboxZones';
 import { ArticulatedCatRenderer, type Landmarks, type Skeleton } from '../engine/ArticulatedCatRenderer';
 import { SpriteRenderer } from '../engine/SpriteRenderer';
 import { DEFAULT_POSE_CONTEXT, GAITS, canLook, computePose, type PoseContext } from '../engine/PoseLibrary';
 import { PoseSpring, clonePose, makePose, type Pose } from '../engine/Pose';
 import { VerletTail, type TailParams } from '../engine/VerletTail';
-import { findLanding, isScrollViolent, platformBelow, platformWidth, solveJump, trajectoryAt, applyFriction, fallStep, type JumpPlan, type Platform, type PlatformSource, type WorldBounds } from '../engine/Physics';
+import { clampThrow, findLanding, isScrollViolent, pendulumStep, platformBelow, platformWidth, solveJump, trajectoryAt, applyFriction, fallStep, type JumpPlan, type PendulumState, type Platform, type PlatformSource, type WorldBounds } from '../engine/Physics';
 import { planRoute, type NavJump, type NavPlan } from '../engine/Navigator';
 import type { ParticleSystem } from '../engine/Particles';
 import type { SoundSynthesizer } from '../engine/SoundSynthesizer';
 import type { AnyCtx } from '../engine/canvas';
 import type { Toy, ToyManager } from '../content/ToyManager';
+import type { StationModel } from './FeedingStation';
 
-export type Gait = 'SAUNTER_WALK' | 'TROT' | 'ZOOMIES_SPRINT' | 'STALK_CURSOR' | 'PLAY_TAG_CHASE' | 'JEALOUSY_INTERVENTION';
+export type Gait = 'SAUNTER_WALK' | 'TROT' | 'ZOOMIES_SPRINT' | 'STALK_CURSOR' | 'PLAY_TAG_CHASE' | 'JEALOUSY_INTERVENTION' | 'SEEKING_FOOD' | 'SEEKING_WATER';
 
 export interface Spot {
   platformId: string;
@@ -44,6 +49,9 @@ export type Task =
   | { kind: 'climb'; side: 1 | -1; height: number; cling: number }
   | { kind: 'pounce'; target: () => Vec2 | null; onPin?: () => void }
   | { kind: 'eat'; toy: Toy }
+  | { kind: 'meal'; bowl: BowlKind }
+  | { kind: 'beg'; bowl: BowlKind; dur: number }
+  | { kind: 'wait'; until: () => boolean; maxTime: number; face?: () => 1 | -1 }
   | { kind: 'do'; fn: () => void };
 
 export interface CursorInfo {
@@ -85,6 +93,10 @@ export interface AgentEnv {
   calm: boolean;
   hour: number;
   social: SocialHooks;
+  /** The food & water station (null when switched off). */
+  station: StationModel | null;
+  /** True while the user is away from the keyboard and mouse. */
+  userIdle: boolean;
 }
 
 export interface SocialLink {
@@ -94,6 +106,24 @@ export interface SocialLink {
 }
 
 const BODY_LEN = 74;
+/** Eating / drinking rates while at the bowl (per second). */
+const MEAL = { eatNeed: 9, eatBowl: 2.4, drinkNeed: 11, drinkBowl: 2.2, full: 12, maxTime: 14 };
+/** Seconds a cat waits by an empty bowl before giving up for a while, and how long that while is. */
+export const BEG_TIME = 26;
+export const BEG_COOLDOWN = 45;
+
+interface HoldState extends PendulumState {
+  /** Where the nape should be (the cursor). */
+  tx: number;
+  ty: number;
+  /** Smoothed hand velocity (px/s). */
+  vx: number;
+  vy: number;
+  /** Initial offset from the cursor to the nape, eased away so the cat never teleports. */
+  offX: number;
+  offY: number;
+  t: number;
+}
 
 export class CatAgent {
   profile: CatProfile;
@@ -113,7 +143,7 @@ export class CatAgent {
   facing: 1 | -1 = 1;
   flip = 1;
   groundId: string | null = 'floor';
-  private jump: { plan: JumpPlan; t: number; targetId: string } | null = null;
+  private jump: { plan: JumpPlan; t: number; targetId: string; fromId: string } | null = null;
   private falling = false;
   private softFall = false;
   private climb: { side: 1 | -1; targetY: number; timer: number; phase: 'up' | 'cling' } | null = null;
@@ -152,6 +182,17 @@ export class CatAgent {
   private bellyVerdict: 'bliss' | 'kick' | null = null;
   private blinkT = -1;
   private readonly poseSpring = new PoseSpring();
+  /** Non-null while a hand holds this cat by the scruff. */
+  private held: HoldState | null = null;
+  /** Set when the cat was dropped / thrown: it tidies its fur after landing. */
+  private afterDrop = false;
+  /** Slow eye blink as a sleeper wakes (seconds into the blink, −1 = none). */
+  private slowBlinkT = -1;
+  /** Until this time the tail is held up in a "question mark" (a friendly greeting). */
+  private greetUntil = -1;
+  /** When this cat last gave up asking for a refill. */
+  lastBegEnd = -999;
+  private begMeowIn = 0;
   /** Idle glance: a held gaze offset that makes an awake cat look around on its own. */
   private glance = { x: 0, y: 0, t: 0, next: 3 };
   private nextBlink = 3;
@@ -179,7 +220,7 @@ export class CatAgent {
     if (profile.renderMode === 'sprite' && profile.sprite) this.sprite = new SpriteRenderer(profile.sprite);
     this.fsm = new FelineFSM('IDLE_SIT', hashString(profile.id));
     this.brain = new UtilityBrain(hashString(profile.id) + 17);
-    this.drives = defaultDrives(profile.personality);
+    this.drives = defaultDrives(profile.personality, profile.traits);
     this.x = x;
     this.y = y;
     this.facing = facing;
@@ -220,6 +261,11 @@ export class CatAgent {
     return !!this.jump || this.falling || isAirborne(this.fsm.current);
   }
 
+  /** True while held by the scruff. */
+  isHeld(): boolean {
+    return !!this.held;
+  }
+
   isClimbing(): boolean {
     return !!this.climb;
   }
@@ -234,7 +280,7 @@ export class CatAgent {
   }
 
   availableForSocial(): boolean {
-    return !this.social && !this.planLocked && !this.isAirborne() && !this.climb && !this.isPetted() && this.groundId !== null;
+    return !this.social && !this.planLocked && !this.held && !this.isAirborne() && !this.climb && !this.isPetted() && this.groundId !== null;
   }
 
   currentPlatform(env: AgentEnv): Platform | null {
@@ -287,10 +333,21 @@ export class CatAgent {
 
   /* -------------------------------------------------------------- update */
 
+  /** The environment of the most recent frame (plan callbacks read live cursor / bounds from it). */
+  liveEnv: AgentEnv | null = null;
+
   update(dt: number, env: AgentEnv): void {
+    this.liveEnv = env;
     this.now = env.now;
     this.catScale = env.catScale;
     this.updateDrivesAndTimers(dt, env);
+
+    if (this.held) {
+      this.holdPhysics(dt, env);
+      this.fsm.update(dt);
+      this.animate(dt, env);
+      return;
+    }
 
     // Brain
     this.brain.tick(dt);
@@ -307,17 +364,27 @@ export class CatAgent {
   private updateDrivesAndTimers(dt: number, env: AgentEnv): void {
     const pettedNicely = this.isPetted() && this.petZone !== null && ZONE_EFFECTS[this.petZone].affection > 2;
     const partner = this.nearestOther(env);
+    const tr = this.profile.traits;
     updateDrives(this.drives, this.fsm.current, dt, this.profile.personality, {
       social: !!this.social,
       pettedNicely,
       alone: !partner || dist(partner.x, partner.y, this.x, this.y) > 500,
+      hungerRate: tr.hungerRateMultiplier,
+      thirstRate: tr.thirstRateMultiplier,
+      playTrait: tr.playfulness,
     });
+    // Overstimulation: long petting sessions slowly wear thin, sooner for expressive cats.
+    if (this.isPetted() && this.petTime > 10 + 14 * (1 - tr.earExpressiveness)) this.drives.irritation = Math.min(100, this.drives.irritation + dt * 2.2 * tr.earExpressiveness);
+    if (this.slowBlinkT >= 0) {
+      this.slowBlinkT += dt;
+      if (this.slowBlinkT > 1.6) this.slowBlinkT = -1;
+    }
     if (!this.isPetted()) {
       this.petTime = 0;
       this.petZoneTime = 0;
       this.bellyVerdict = null;
       this.bliss = Math.max(0, this.bliss - dt * 2.5);
-      if (this.purring && this.fsm.current !== 'PURRING' && this.fsm.current !== 'KNEADING_BISCUITS') this.setPurr(env, false);
+      if (this.purring && this.fsm.current !== 'PURRING' && this.fsm.current !== 'KNEADING_BISCUITS' && !this.held && env.now > this.greetUntil) this.setPurr(env, false);
     }
     if (this.peekEye > 0) this.peekEye -= dt;
     if (this.earTwitch > 0) this.earTwitch -= dt;
@@ -393,12 +460,28 @@ export class CatAgent {
       hour: env.hour,
       calm: env.calm,
       petted: this.isPetted(),
+      traits: this.profile.traits,
+      station: env.station?.enabled
+        ? {
+            exists: true,
+            food: env.station.level('food'),
+            water: env.station.level('water'),
+            dist: Math.abs(env.station.centerX(env.bounds) - this.x),
+            begReady: env.now - this.lastBegEnd > BEG_COOLDOWN,
+          }
+        : undefined,
     };
   }
 
   think(env: AgentEnv): void {
     if (this.isPetted()) {
       this.decideIn = 1;
+      return;
+    }
+    // While you are away the cats nap; the coordinator brings the bonded pair together.
+    if (env.userIdle && !this.social) {
+      if (!this.isAsleep() || this.plan.length === 0) this.makePlan('sleep', env);
+      this.decideIn = this.rng.range(8, 14);
       return;
     }
     const decision = this.brain.decide(this.brainContext(env));
@@ -450,7 +533,8 @@ export class CatAgent {
         const partner = this.nearestOther(env);
         if (partner && partner.isAsleep() && r.chance(0.35 + 0.6 * pers.sociability) && env.social.request(this, env, 'sleep')) return;
         let p: Platform | null = null;
-        let state: CatState = r.chance(0.55) ? 'CURLED_SLEEP' : 'SPRAWLED_SLEEP';
+        // Sprawlers (Alex) stretch right out; others mostly curl into a ball.
+        let state: CatState = r.chance(0.3 + 0.5 * this.profile.traits.sprawlLover) ? 'SPRAWLED_SLEEP' : 'CURLED_SLEEP';
         let face: 1 | -1 | undefined;
         let spot: Spot | null = null;
         if (sig.meltedLoafSleep && r.chance(0.8)) {
@@ -490,7 +574,14 @@ export class CatAgent {
           face = e.face;
           state = sig.widePawSplay && r.chance(0.5) ? 'WIDE_PAW_SPLAY' : r.weighted<CatState>(['DANGLE_PAWS', 'LEDGE_CHIN_REST'], [1, sig.chinPropSleep ? 2 : 0.8]);
         }
-        this.setPlan([{ kind: 'goto', spot, gait: 'SAUNTER_WALK', face }, { kind: 'state', state, dur: r.range(8, 22) }], 'rest');
+        // A good long front-paw stretch before settling down.
+        const stretch: Task[] = r.chance(0.35 * this.profile.traits.sprawlLover) ? [{ kind: 'state', state: 'WAKE_ARCH_STRETCH', dur: 99 }] : [];
+        this.setPlan([{ kind: 'goto', spot, gait: 'SAUNTER_WALK', face }, ...stretch, { kind: 'state', state, dur: r.range(8, 22) }], 'rest');
+        return;
+      }
+      case 'eat':
+      case 'drink': {
+        if (!this.planMeal(intent === 'eat' ? 'food' : 'water', env)) this.makePlan('rest', env);
         return;
       }
       case 'perch': {
@@ -679,6 +770,55 @@ export class CatAgent {
     }
   }
 
+  /**
+   * Walks to the food or water bowl. With something in it the cat eats / drinks
+   * and then washes its face; with an empty bowl it sits beside it and asks.
+   */
+  planMeal(bowl: BowlKind, env: AgentEnv): boolean {
+    const st = env.station;
+    if (!st || !st.enabled) return false;
+    const S = this.S;
+    const app = st.approach(bowl, S, env.bounds);
+    const busy = st.occupiedBy(bowl, this.id);
+    const level = st.level(bowl);
+    const need = bowl === 'food' ? this.drives.hunger : this.drives.thirst;
+    const gait: Gait = bowl === 'food' ? 'SEEKING_FOOD' : 'SEEKING_WATER';
+    if (level > EMPTY_BOWL) {
+      if (busy) {
+        // Someone else is at this bowl: wait nearby, then try again.
+        const waitX = app.x - app.face * this.bodyLen() * 1.05;
+        this.setPlan([{ kind: 'goto', spot: { platformId: 'floor', x: waitX }, gait, face: app.face, maxTime: 20 }, { kind: 'state', state: 'IDLE_SIT', dur: this.rng.range(3, 5) }], `wait-${bowl}`);
+        this.decideIn = 4;
+        return true;
+      }
+      this.setPlan(
+        [
+          { kind: 'goto', spot: () => ({ platformId: 'floor', x: st.approach(bowl, this.S, (this.liveEnv ?? env).bounds).x }), gait, face: app.face, tol: 4 * S, maxTime: 30 },
+          { kind: 'meal', bowl },
+          // Every meal ends with a quick sit-down wash.
+          { kind: 'state', state: 'GROOM_WASH_FACE', dur: 3 },
+          { kind: 'state', state: 'IDLE_SIT', dur: this.rng.range(1.5, 3) },
+        ],
+        bowl === 'food' ? 'eat' : 'drink',
+        // Locked: a cat finishes its meal (and its wash) rather than wandering off mid-bite.
+        true,
+      );
+      return true;
+    }
+    if (need <= BEG_LEVEL || env.now - this.lastBegEnd < BEG_COOLDOWN) return false;
+    // Empty bowl: sit beside it, look up at the human, meow now and then.
+    const sitX = app.x - app.face * 6 * S;
+    this.setPlan(
+      [
+        { kind: 'goto', spot: { platformId: 'floor', x: sitX }, gait, tol: 6 * S, maxTime: 30 },
+        { kind: 'beg', bowl, dur: BEG_TIME },
+      ],
+      `beg-${bowl}`,
+      true,
+    );
+    return true;
+  }
+
   /* ------------------------------------------------------------ executor */
 
   private turn(dir: 1 | -1): void {
@@ -734,7 +874,7 @@ export class CatAgent {
       this.completeTask();
       return;
     }
-    this.jump = { plan, t: 0, targetId: hop.to };
+    this.jump = { plan, t: 0, targetId: hop.to, fromId: hop.from };
     this.groundId = null;
     this.fsm.force('JUMP_ASCEND');
   }
@@ -905,6 +1045,92 @@ export class CatAgent {
         } else if (this.taskTime > 8) this.completeTask();
         return;
       }
+      case 'meal': {
+        const st = env.station;
+        if (!st || !st.enabled) {
+          this.completeTask();
+          return;
+        }
+        const bowl = task.bowl;
+        const meal: CatState = bowl === 'food' ? 'EATING' : 'DRINKING';
+        if (!st.claim(bowl, this.id)) {
+          this.completeTask();
+          return;
+        }
+        if (this.fsm.current !== meal) {
+          this.fsm.request(meal);
+          if (this.taskTime > 6) {
+            st.release(bowl, this.id);
+            this.completeTask();
+          }
+          return;
+        }
+        const S = this.S;
+        const key = bowl === 'food' ? 'hunger' : 'thirst';
+        const got = st.consume(bowl, dt * (bowl === 'food' ? MEAL.eatBowl : MEAL.drinkBowl));
+        if (got > 0) this.drives[key] = Math.max(0, this.drives[key] - dt * (bowl === 'food' ? MEAL.eatNeed : MEAL.drinkNeed));
+        if (this.lm && this.rng.chance(dt * (bowl === 'food' ? 3.2 : 4))) {
+          const mx = this.lm.head.x + this.facing * this.lm.head.r * 0.6;
+          env.particles.emit(bowl === 'food' ? 'crumb' : 'drop', mx, this.lm.head.y + this.lm.head.r * 0.7, 1, S);
+        }
+        if (this.rng.chance(dt * (bowl === 'food' ? 2.6 : 3.4))) {
+          if (bowl === 'food') env.sound?.crunch();
+          else env.sound?.lap();
+        }
+        const done = this.drives[key] < MEAL.full || st.level(bowl) <= 0 || this.fsm.time > MEAL.maxTime;
+        if (done) {
+          st.release(bowl, this.id);
+          this.drives.affection = Math.min(100, this.drives.affection + 4);
+          this.completeTask();
+        }
+        return;
+      }
+      case 'beg': {
+        const st = env.station;
+        if (!st || !st.enabled || st.level(task.bowl) > EMPTY_BOWL) {
+          // Refilled (or put away): let the brain decide again right now.
+          if (this.fsm.current === 'EMPTY_BOWL_WAIT') this.fsm.request('IDLE_SIT');
+          this.completeTask();
+          this.decideIn = 0.3;
+          return;
+        }
+        const face: 1 | -1 = env.cursor.present ? (env.cursor.x >= this.x ? 1 : -1) : st.centerX(env.bounds) >= this.x ? 1 : -1;
+        if (!this.taskEntered) {
+          if (face !== this.facing) {
+            if (STATE_META[this.fsm.current].posture === 'stand') this.turn(face);
+            else this.fsm.request('IDLE_STAND');
+            if (this.turning || face !== this.facing) return;
+          }
+          if (this.turning) return;
+          this.fsm.request('EMPTY_BOWL_WAIT');
+          if (this.fsm.isAt('EMPTY_BOWL_WAIT')) {
+            this.taskEntered = true;
+            this.taskTime = 0;
+            this.begMeowIn = 0.6;
+          } else if (this.taskTime > 10) this.completeTask();
+          return;
+        }
+        this.begMeowIn -= dt;
+        if (this.begMeowIn <= 0) {
+          this.begMeowIn = this.rng.range(5.5, 8);
+          env.sound?.meow(1.12 + this.seed * 0.15, 0.48);
+          if (this.lm) env.particles.emit(task.bowl === 'food' ? 'thoughtFood' : 'thoughtWater', this.lm.head.x + this.facing * 10 * this.S, this.lm.head.y - 26 * this.S, 1, this.S);
+        }
+        if (this.fsm.current !== 'EMPTY_BOWL_WAIT' || this.taskTime >= task.dur) {
+          this.lastBegEnd = env.now;
+          this.completeTask();
+        }
+        return;
+      }
+      case 'wait': {
+        // Hold the current calm posture until something happens (e.g. the partner arrives).
+        const face = task.face?.();
+        if (face && face !== this.facing && STATE_META[this.fsm.current].posture === 'stand') this.turn(face);
+        else if (STATE_META[this.fsm.current].locomotion) this.fsm.request('IDLE_STAND');
+        else if (STATE_META[this.fsm.current].posture === 'stand' && !this.turning && this.taskTime > 0.6) this.fsm.request('IDLE_SIT');
+        if (task.until() || this.taskTime > task.maxTime) this.completeTask();
+        return;
+      }
       case 'do': {
         this.completeTask();
         task.fn();
@@ -944,8 +1170,18 @@ export class CatAgent {
     const route = this.route;
     if (route && route.hops[this.hop] && route.hops[this.hop].to === p.id) this.hop++;
     else this.route = null;
-    // Clumsiness: a cute slip on landing, followed by dignified "I meant that" grooming.
-    if (p.kind === 'dom' && this.rng.chance(this.profile.personality.clumsiness * 0.14)) {
+    if (this.afterDrop) {
+      // Put down (or tossed): land, then smooth the ruffled fur with a quick paw lick.
+      this.afterDrop = false;
+      this.plan = [{ kind: 'state', state: 'GROOM_LICK_PAW', dur: 3 }, { kind: 'state', state: 'IDLE_SIT', dur: this.rng.range(1.5, 3) }];
+      this.planLabel = 'after-drop';
+      this.planLocked = false;
+      this.taskTime = 0;
+      this.taskEntered = false;
+      this.decideIn = 5;
+      if (impact > 380) env.particles.emit('puff', this.x, this.y - 2, 5, this.S);
+    } else if (p.kind === 'dom' && this.rng.chance(this.profile.personality.clumsiness * 0.14)) {
+      // Clumsiness: a cute slip on landing, followed by dignified "I meant that" grooming.
       this.slip = 0.5;
       this.vx = this.facing * 110 * this.S;
       env.particles.emit('puff', this.x, this.y - 2, 3, this.S);
@@ -1006,7 +1242,8 @@ export class CatAgent {
       this.vy = p.vy;
       if (this.vy > 0 && this.fsm.current === 'JUMP_ASCEND') this.fsm.force('FALL_DESCEND');
       if (this.vy > 0) {
-        const land = findLanding(prevY, this.y, this.x, env.platforms);
+        // Stepping off a ledge's edge, the arc may dip back over the ledge it left: never land back on it.
+        const land = findLanding(prevY, this.y, this.x, env.platforms, j.fromId !== j.targetId ? j.fromId : null);
         if (land) {
           this.land(land, env, this.vy);
           return;
@@ -1025,7 +1262,9 @@ export class CatAgent {
       this.y = st.y;
       this.vy = st.vy;
       this.vx = applyFriction(this.vx, 0.8, dt);
-      this.x = clamp(this.x + this.vx * dt, 4, W - 4);
+      const fx = this.x + this.vx * dt;
+      if (fx < 4 || fx > W - 4) this.vx = -this.vx * 0.35; // a thrown cat bounces softly off the screen edge
+      this.x = clamp(fx, 4, W - 4);
       if (this.vy > 0 && this.fsm.current === 'JUMP_ASCEND') this.fsm.force('FALL_DESCEND');
       const land = this.vy > 0 ? findLanding(prevY, this.y, this.x, env.platforms) : null;
       if (land) this.land(land, env, this.vy);
@@ -1044,6 +1283,8 @@ export class CatAgent {
           return;
         }
         const dy = p.y - this.y;
+        // Page scrolling is applied by the world before physics (shiftForScroll), so any jump
+        // left here is the ledge itself moving — an animation or a layout shift — which can knock a cat off.
         if (isScrollViolent(dy, dt) && !this.climb) {
           this.startFall(env, true);
           return;
@@ -1052,8 +1293,9 @@ export class CatAgent {
           this.groundId = 'floor';
           this.y = env.source.floor().y;
           this.route = null;
-        } else if (p.y < 30) {
-          this.startFall(env, true);
+        } else if (p.y < this.bodyLen() * 0.55) {
+          // The ledge is scrolling away out of the top of the screen: hop down to the floor.
+          this.hopDown(env);
           return;
         } else {
           this.y = p.y;
@@ -1090,11 +1332,165 @@ export class CatAgent {
     if (g && Math.abs(this.vx) > 1) this.gaitPhase += (Math.abs(this.vx) * dt * g.stance) / (g.stride * S);
   }
 
+  /** Calm step off a ledge that is leaving the viewport (no startle). */
+  private hopDown(env: AgentEnv): void {
+    this.groundId = null;
+    this.jump = null;
+    this.falling = true;
+    this.softFall = true;
+    this.vy = -60 * this.S;
+    this.vx = this.facing * 40 * this.S;
+    if (!this.fsm.force('FALL_DESCEND')) this.fsm.force('STARTLED_AIRBORNE');
+    this.route = null;
+    if (!this.planLocked) this.plan = [];
+    void env;
+  }
+
+  /**
+   * The page scrolled by (dx, dy) px since the last frame. A cat riding a page
+   * element that scrolled with the page moves with it at once (before physics
+   * runs), so it never hovers or gets knocked off by ordinary scrolling. Cats on
+   * fixed / sticky elements are left alone, since those don't move.
+   */
+  shiftForScroll(dx: number, dy: number, env: AgentEnv): void {
+    if ((dx === 0 && dy === 0) || this.held) return;
+    const movedWithPage = (id: string, oldY: number): Platform | null => {
+      const p = env.source.get(id);
+      return p && Math.abs(p.y - (oldY - dy)) < 6 ? p : null;
+    };
+    if (this.groundId && this.groundId !== 'floor') {
+      const p = movedWithPage(this.groundId, this.y);
+      if (!p) return;
+      const sx = -dx;
+      const sy = p.y - this.y;
+      this.x += sx;
+      this.y = p.y;
+      this.tail.translate(sx, sy);
+    } else if (this.jump && this.jump.targetId !== 'floor') {
+      // Mid-leap toward a ledge: the whole arc moves with the page.
+      const j = this.jump.plan;
+      if (!movedWithPage(this.jump.targetId, j.y1)) return;
+      j.x0 -= dx;
+      j.x1 -= dx;
+      j.y0 -= dy;
+      j.y1 -= dy;
+      j.apexY -= dy;
+      this.x -= dx;
+      this.y -= dy;
+      this.tail.translate(-dx, -dy);
+    }
+  }
+
+  /* ------------------------------------------------------------- holding */
+
+  /** Picks the cat up by the scruff at (x, y). */
+  grab(x: number, y: number, env: AgentEnv): void {
+    if (this.held) return;
+    this.jump = null;
+    this.falling = false;
+    this.climb = null;
+    this.groundId = null;
+    this.plan = [];
+    this.planLocked = false;
+    this.route = null;
+    this.social = null;
+    this.afterDrop = false;
+    env.station?.releaseAll(this.id);
+    if (!this.fsm.force('SCRUFF_HELD')) this.fsm.restore('SCRUFF_HELD');
+    const sc = this.lm?.scruff ?? { x, y };
+    this.held = { tx: x, ty: y, vx: 0, vy: 0, angle: 0, angVel: 0, offX: sc.x - x, offY: sc.y - y, t: 0 };
+    this.vx = 0;
+    this.vy = 0;
+    this.bliss = 0;
+    sound(env)?.unlock();
+    env.sound?.mrrp(1.15 + this.seed * 0.2);
+    this.setPurr(env, true, 0.45);
+  }
+
+  /** Moves the hand that holds the cat; (vx, vy) is the hand's smoothed velocity in px/s. */
+  holdMove(x: number, y: number, vx: number, vy: number): void {
+    if (!this.held) return;
+    this.held.tx = x;
+    this.held.ty = y;
+    this.held.vx = vx;
+    this.held.vy = vy;
+  }
+
+  /** Current pendulum swing angle while held (radians, + = body swings right). */
+  get holdAngle(): number {
+    return this.held ? this.held.angle : 0;
+  }
+
+  /** Lets go: the hand's velocity becomes the throw, then gravity takes over. */
+  release(vx: number, vy: number, env: AgentEnv): void {
+    const h = this.held;
+    if (!h) return;
+    this.held = null;
+    this.setPurr(env, false);
+    const S = this.S;
+    const W = env.bounds.width;
+    const floorY = env.source.floor().y;
+    // Re-anchor the physics point under the body's centre (where the feet will be once it
+    // rights itself) and fold the difference into the pose root so nothing jumps on screen.
+    if (this.skel && !(this.sprite && this.sprite.ready)) {
+      const { com } = this.renderer.scruffLocal(this.skel);
+      const wc = matApply(this.skel.M, com.x, com.y);
+      const nx = clamp(wc.x, 4, W - 4);
+      const ny = Math.min(floorY, wc.y + 30 * S);
+      const f = this.flip >= 0 ? 1 : -1;
+      const ddx = this.x - nx;
+      const ddy = this.y - ny;
+      // A⁻¹·d with A = Scale(f·S, S)·Rot(rot)
+      const ux = ddx / (f * S);
+      const uy = ddy / S;
+      const c = Math.cos(-this.pose.rot);
+      const sn = Math.sin(-this.pose.rot);
+      this.pose.rootX += c * ux - sn * uy;
+      this.pose.rootY += sn * ux + c * uy;
+      this.x = nx;
+      this.y = ny;
+    } else {
+      this.y = Math.min(floorY, this.y);
+    }
+    const v = clampThrow(vx, vy);
+    this.vx = v.vx;
+    this.vy = v.vy;
+    this.groundId = null;
+    this.jump = null;
+    this.falling = true;
+    this.softFall = false;
+    this.afterDrop = true;
+    if (!this.fsm.force('FALL_DESCEND')) this.fsm.restore('IDLE_STAND');
+    this.decideIn = 4;
+  }
+
+  private holdPhysics(dt: number, env: AgentEnv): void {
+    const h = this.held as HoldState;
+    h.t += dt;
+    // Horizontal hand speed (px per 60 Hz frame) drives the swing; the spring-damper settles it.
+    pendulumStep(h, h.vx / 60, dt);
+    const k = Math.exp(-10 * dt);
+    h.offX *= k;
+    h.offY *= k;
+    this.vx = h.vx;
+    this.vy = h.vy;
+    // Finish any turn in progress, then hold the facing.
+    if (this.flip !== this.facing) this.flip = this.facing;
+    // Sprite cats have no rig to pin: line their nape up with the hand using last frame's landmarks.
+    if (this.sprite && this.sprite.ready && this.lm) {
+      this.x += h.tx + h.offX - this.lm.scruff.x;
+      this.y += h.ty + h.offY - this.lm.scruff.y;
+    }
+    // Held a long time, a cat gets fidgety.
+    if (h.t > 8) this.drives.irritation = Math.min(100, this.drives.irritation + dt * 1.5 * (0.5 + this.profile.personality.sassiness));
+    void env;
+  }
+
   /* --------------------------------------------------------------- petting */
 
   /** Continuous stroke over a zone (intensity 0..1). */
   pet(zone: PetZone, dt: number, intensity: number, env: AgentEnv): void {
-    if (this.isAirborne() || this.climb) return;
+    if (this.isAirborne() || this.climb || this.held) return;
     const now = env.now;
     if (now - this.lastPetAt > 0.6) {
       this.petTime = 0;
@@ -1108,7 +1504,9 @@ export class CatAgent {
     sound(env)?.unlock();
     const p = this.profile.personality;
     const eff = ZONE_EFFECTS[zone];
-    this.drives.affection = clamp(this.drives.affection + eff.affection * intensity * dt, 0, 100);
+    const loved = zone === 'CHIN_CHEEKS' || zone === 'CROWN_EARS' || zone === 'BACK_BASE_OF_TAIL' || zone === 'SCRUFF';
+    const affinity = loved ? this.profile.traits.pettingAffinity : 1;
+    this.drives.affection = clamp(this.drives.affection + eff.affection * affinity * intensity * dt, 0, 100);
     this.drives.irritation = clamp(this.drives.irritation + eff.irritation * intensity * dt * (eff.irritation > 0 ? 0.5 + p.sassiness : 1), 0, 100);
     if (eff.affection > 2) this.drives.socialNeed = Math.max(0, this.drives.socialNeed - dt * 1.5);
     // While being petted the cat stays put.
@@ -1145,6 +1543,10 @@ export class CatAgent {
         }
         if (this.petZoneTime > 0.6) this.setPurr(env, true, 0.8);
         if (this.petZoneTime > 2.5 && st !== 'KNEADING_BISCUITS' && !this.social) this.fsm.request('KNEADING_BISCUITS');
+        break;
+      case 'SCRUFF':
+        this.bliss = Math.min(1, this.bliss + dt * 1.2);
+        if (this.petZoneTime > 0.8) this.setPurr(env, true, 0.6);
         break;
       case 'BACK_BASE_OF_TAIL':
         this.bliss = Math.min(1, this.bliss + dt * 1.5);
@@ -1186,7 +1588,7 @@ export class CatAgent {
   /** A single click / boop. */
   poke(zone: PetZone | null, env: AgentEnv): void {
     sound(env)?.unlock();
-    if (this.isAirborne() || this.climb) return;
+    if (this.isAirborne() || this.climb || this.held) return;
     if (this.isAsleep()) {
       if (this.profile.signature.airplaneSquint || this.profile.personality.sassiness > 0.55) this.trySquint(env);
       else this.peekEye = 1.1;
@@ -1315,10 +1717,29 @@ export class CatAgent {
       target.earL = Math.min(target.earL, -4);
       target.earR = Math.min(target.earR, -4);
     }
-    if (!this.isAsleep() && this.drives.irritation > 58) {
-      target.earL = Math.min(target.earL, -34);
-      target.earR = Math.min(target.earR, -34);
-      target.tailWhip = Math.max(target.tailWhip, 0.5);
+    // Annoyed or overstimulated: "airplane ears". Expressive cats (Anna) show it much sooner.
+    const earLimit = 58 - 30 * this.profile.traits.earExpressiveness;
+    if (!this.isAsleep() && this.drives.irritation > earLimit) {
+      const k = smoothstep(earLimit, earLimit + 12, this.drives.irritation);
+      target.earL = Math.min(target.earL, target.earL + (-36 - target.earL) * k);
+      target.earR = Math.min(target.earR, target.earR + (-36 - target.earR) * k);
+      target.tailWhip = Math.max(target.tailWhip, 0.5 * k);
+    }
+    // Waking slowly: one long, soft blink before the stretch.
+    if (this.slowBlinkT >= 0) {
+      const b = this.slowBlinkT;
+      const open = b < 0.5 ? smoothstep(0, 0.5, b) * 0.45 : b < 0.8 ? 0.45 : b < 1.15 ? 0.45 * (1 - smoothstep(0.8, 1.15, b)) : 0.6 * smoothstep(1.15, 1.6, b);
+      target.eyeOpen = Math.max(target.eyeOpen, open);
+    }
+    // A friendly greeting: tail straight up with a little hook at the tip ("question mark").
+    if (env.now < this.greetUntil && !this.isAsleep() && meta0.posture === 'stand') {
+      target.tailAngle = -1.62;
+      target.tailCurl = 0.62;
+      target.tailStiff = 0.78;
+      target.tailWave = 0.04;
+      target.tailWhip = 0;
+      target.earL = Math.max(target.earL, 4);
+      target.earR = Math.max(target.earR, 4);
     }
     if (this.peekEye > 0 && this.isAsleep()) target.eyeOpen = Math.max(target.eyeOpen, 0.35 * Math.sin(Math.PI * clamp01(this.peekEye / 1.1)));
     if (this.earTwitch > 0) {
@@ -1345,9 +1766,17 @@ export class CatAgent {
       }
     }
 
+    // Held by the scruff: rotate the hanging body so its centre of mass sits under the nape, plus the swing.
+    const held = this.held;
+    if (held && this.skel) {
+      const { scruff, com } = this.renderer.scruffLocal(this.skel);
+      const f = this.flip >= 0 ? 1 : -1;
+      target.rot = Math.PI / 2 - Math.atan2(com.y - scruff.y, com.x - scruff.x) - f * held.angle;
+    }
+
     // Blend toward the target pose; airborne & reactive states blend faster.
     const meta = STATE_META[state];
-    const rate = meta.posture === 'air' ? 14 : meta.posture === 'sleep' ? 3.2 : state === 'POUNCE_AND_PIN' || state === 'BUNNY_KICK_SWAT' || state === 'TAIL_LASH' ? 12 : meta.locomotion ? 10 : 6.5;
+    const rate = meta.posture === 'air' ? 14 : meta.posture === 'held' ? 9 : meta.posture === 'sleep' ? 3.2 : state === 'POUNCE_AND_PIN' || state === 'BUNNY_KICK_SWAT' || state === 'TAIL_LASH' ? 12 : meta.locomotion ? 10 : 6.5;
     // Gait-driven feet must not lag (prevents foot skating).
     this.poseSpring.step(this.pose, target, rate, dt);
     if (meta.locomotion) {
@@ -1358,6 +1787,16 @@ export class CatAgent {
     const S = this.S;
     const tr = { x: this.x, y: this.y, flip: this.flip === 0 ? 0.001 : this.flip, scale: S };
     this.skel = this.renderer.skeleton(this.pose, tr, env.now);
+    if (held && !(this.sprite && this.sprite.ready)) {
+      // Pin the nape to the hand: translate the whole rig (and the physics point) onto it.
+      const { scruff } = this.renderer.scruffLocal(this.skel);
+      const ws = matApply(this.skel.M, scruff.x, scruff.y);
+      const ddx = held.tx + held.offX - ws.x;
+      const ddy = held.ty + held.offY - ws.y;
+      this.x += ddx;
+      this.y += ddy;
+      this.skel.M = { ...this.skel.M, e: this.skel.M.e + ddx, f: this.skel.M.f + ddy };
+    }
     const anchor = this.renderer.tailAnchorWorld(this.skel, this.pose);
     const params: TailParams = {
       baseAngle: anchor.angle,
@@ -1372,6 +1811,12 @@ export class CatAgent {
       handedness: this.flip >= 0 ? 1 : -1,
     };
     this.tail.segLen = 10.5 * S * this.profile.morphology.tailLength;
+    if (held) {
+      // Hanging: the tail droops under gravity and swings against the hand's acceleration.
+      params.gravity = 620 + Math.max(0, -held.vy) * 0.4;
+      params.stiffness = 0.06;
+      params.curl = clamp(-held.angVel * 0.08, -0.25, 0.25);
+    }
     const p = this.groundId ? this.currentPlatform(env) : null;
     const groundY = p ? p.y : Infinity;
     const ground = p ? (x: number) => (x >= p.xMin - 2 && x <= p.xMax + 2 ? groundY : Infinity) : null;
@@ -1393,6 +1838,13 @@ export class CatAgent {
     return this.lm;
   }
 
+  /** Recomputes hit-test landmarks from the current rig without drawing (frames skipped by the drowsy throttle, tests). */
+  refreshLandmarks(): Landmarks | null {
+    if (this.sprite && this.sprite.ready) return this.lm;
+    if (this.skel) this.lm = this.renderer.landmarks(this.skel, this.tail, this.S);
+    return this.lm;
+  }
+
   /* ------------------------------------------------------- persistence */
 
   snapshot(bounds: WorldBounds): CatRuntimeSnapshot {
@@ -1409,8 +1861,10 @@ export class CatAgent {
   }
 
   restore(snap: CatRuntimeSnapshot, env: AgentEnv, elapsedSeconds = 0): void {
-    this.drives = { ...snap.drives };
-    if (elapsedSeconds > 0) driftDrives(this.drives, elapsedSeconds, this.profile.personality);
+    this.drives = completeDrives(snap.drives, this.profile.personality, this.profile.traits);
+    if (elapsedSeconds > 0) driftDrives(this.drives, elapsedSeconds, this.profile.personality, this.profile.traits);
+    this.held = null;
+    this.afterDrop = false;
     this.x = clamp(snap.relX * env.bounds.width, 10, env.bounds.width - 10);
     this.facing = snap.facing;
     this.flip = snap.facing;
@@ -1459,6 +1913,17 @@ export class CatAgent {
     this.poseSpring.reset();
   }
 
+  /** Starts the slow wake-up blink (idle wake-up greeting). */
+  slowBlink(): void {
+    this.slowBlinkT = 0;
+  }
+
+  /** Raises a question-mark tail and purrs for a few seconds (greeting the returning human). */
+  greet(env: AgentEnv, seconds = 7): void {
+    this.greetUntil = env.now + seconds;
+    this.setPurr(env, true, 0.55);
+  }
+
   /** Forces an exact state (Studio "trigger state" buttons) via the natural chain. */
   requestState(state: CatState, env: AgentEnv, hold = 12): void {
     this.setPlan([{ kind: 'state', state, dur: hold }], `debug:${state}`, true);
@@ -1467,6 +1932,7 @@ export class CatAgent {
 
   dispose(env: AgentEnv | null): void {
     env?.sound?.purr(this.id, false);
+    env?.station?.releaseAll(this.id);
   }
 }
 

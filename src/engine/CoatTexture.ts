@@ -502,6 +502,8 @@ function paintTorso(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
       lc.fillStyle = g;
       lc.fillRect(0, 0, R.w, R.h);
     }
+    // Alex's amber flank patch lives in the coat itself, so the stripes run faintly over it.
+    if (m.flankPatch) paintFlankPatch(lc, local, torsoMaskPolys(pattern, m)[0], pal, rng, 0.8);
     const style = stripeStyle(pattern);
     if (style === 'mackerel') drawMackerelStripes(lc, local, rng, pal.tabbyStripe, m.stripeDensity);
     else if (style === 'classic') drawClassicSwirl(lc, local, rng, pal.tabbyStripe);
@@ -513,6 +515,8 @@ function paintTorso(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
     }
     // second, finer ticking pass on top of stripes for a furry break-up
     tick(lc, local, rng, 1600, [shadeHex(pal.tabbyBase, 0.22), mixHex(pal.tabbyBase, pal.baseWhite, 0.3)], 0.35, [3, 7], Math.PI * 0.95, 0.3, 0.9);
+    // ...and a lighter wash on top so the patch reads as distinctly amber, not just warm stripes.
+    if (m.flankPatch) paintFlankPatch(lc, local, torsoMaskPolys(pattern, m)[0], pal, rng, 0.3);
   }
 
   // Mask
@@ -531,37 +535,68 @@ function paintTorso(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
   // Fur-edge feathering where colour meets white: short strokes crossing the border.
   if (whiteBase) featherEdges(ctx, mask, R, rng, pal);
 
-  // 3. Golden flank blotch (Cat 1).
+  // 3. Where the amber patch meets the white belly the warm hairs spill a little onto the white.
   if (m.flankPatch) {
-    const polys = torsoMaskPolys(pattern, m);
-    const rear = polys[0];
-    const bottomAt = (u: number) => {
-      let best = 0.6;
-      let bd = Infinity;
-      for (const pt of rear) {
-        if (pt[1] > 0.3 && Math.abs(pt[0] - u) < bd) {
-          bd = Math.abs(pt[0] - u);
-          best = pt[1];
-        }
-      }
-      return best;
-    };
-    const u = 0.25;
-    const v = bottomAt(u) - 0.07;
-    const cx = R.x + u * R.w;
-    const cy = R.y + v * R.h;
-    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 46);
-    g.addColorStop(0, rgba(pal.flankPatch, 0.95));
-    g.addColorStop(0.55, rgba(pal.flankPatch, 0.7));
-    g.addColorStop(1, rgba(pal.flankPatch, 0));
+    const band = flankPatchBand(torsoMaskPolys(pattern, m)[0]);
     ctx.save();
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 52, 26, -0.08, 0, Math.PI * 2);
-    ctx.fill();
-    tick(ctx, { x: cx - 40, y: cy - 16, w: 80, h: 32 }, rng, 260, [shadeHex(pal.flankPatch, 0.12), shadeHex(pal.flankPatch, -0.1)], 0.6, [4, 9], Math.PI, 0.2);
+    for (const b of band) {
+      tick(ctx, { x: R.x + b.u * R.w - 14, y: R.y + b.v * R.h - 2, w: 28, h: 12 }, rng, 26, [pal.flankPatch, pal.rufus], 0.45, [3, 7], Math.PI * 0.6, 0.35, 1);
+    }
     ctx.restore();
   }
+}
+
+/** Points along the lower edge of the rear tabby saddle (where tabby meets the white belly). */
+function flankPatchBand(rear: Pt[]): { u: number; v: number }[] {
+  const edge = rear.filter((p) => p[1] > 0.3).sort((a, b) => a[0] - b[0]);
+  const at = (u: number): number => {
+    for (let i = 1; i < edge.length; i++) {
+      if (edge[i][0] >= u) {
+        const a = edge[i - 1];
+        const b = edge[i];
+        const t = (u - a[0]) / Math.max(1e-6, b[0] - a[0]);
+        return lerp(a[1], b[1], clamp01(t));
+      }
+    }
+    return edge.length ? edge[edge.length - 1][1] : 0.6;
+  };
+  const out: { u: number; v: number }[] = [];
+  for (let u = 0.1; u <= 0.46; u += 0.045) out.push({ u, v: at(u) });
+  return out;
+}
+
+/**
+ * The warm rufous / amber patch low on the flank: a chain of soft blobs hugging the
+ * tabby-white border, bright amber (#D47A34) in the middle deepening to rufous
+ * (#B86528) at its edges, with directional fur so it never looks airbrushed.
+ */
+function paintFlankPatch(ctx: AnyCtx, R: UVRect, rear: Pt[], pal: CoatPalette, rng: Rng, alpha: number): void {
+  const band = flankPatchBand(rear);
+  ctx.save();
+  band.forEach((b, i) => {
+    const f = i / Math.max(1, band.length - 1);
+    // Thickest over the middle of the flank, tapering toward chest and hip.
+    // Irregular, overlapping blobs: brightest low on the flank, fading up into the tabby saddle.
+    const rx = (26 + 24 * Math.sin(f * Math.PI)) * (0.75 + rng.next() * 0.5);
+    const ry = (14 + 12 * Math.sin(f * Math.PI)) * (0.75 + rng.next() * 0.5);
+    const cx = R.x + b.u * R.w + rng.gauss() * 6;
+    const cy = R.y + (b.v - 0.1 - rng.next() * 0.06) * R.h;
+    const g = ctx.createRadialGradient(cx, cy + ry * 0.35, 1, cx, cy, Math.max(rx, ry));
+    g.addColorStop(0, rgba(pal.flankPatch, 0.9 * alpha));
+    g.addColorStop(0.4, rgba(mixHex(pal.flankPatch, pal.rufus, 0.5), 0.72 * alpha));
+    g.addColorStop(0.75, rgba(mixHex(pal.rufus, pal.tabbyBase, 0.35), 0.35 * alpha));
+    g.addColorStop(1, rgba(pal.rufus, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, -0.12 + rng.gauss() * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  const first = band[0];
+  const last = band[band.length - 1];
+  const x0 = R.x + first.u * R.w - 20;
+  const x1 = R.x + last.u * R.w + 20;
+  tick(ctx, { x: x0, y: R.y + (Math.min(first.v, last.v) - 0.2) * R.h, w: x1 - x0, h: 0.26 * R.h }, rng, Math.round(320 * alpha), [shadeHex(pal.flankPatch, 0.1), pal.rufus, mixHex(pal.flankPatch, '#E9A35E', 0.4)], 0.5 * alpha, [4, 9], Math.PI * 0.97, 0.2, 1.1);
+  ctx.restore();
 }
 
 function featherEdges(ctx: AnyCtx, mask: AnyCanvas, R: UVRect, rng: Rng, pal: CoatPalette): void {
@@ -758,26 +793,37 @@ function paintHead(ctx: AnyCtx, p: CatProfile, rng: Rng): void {
     const topY = R.y + T.eyeY - 14 - m.blazeHeight * 64;
     const hwEye = 2.5 + blazeW * 17;
     const hwNose = 9 + blazeW * 26;
+    // Asymmetry: one side of the blaze sweeps further out across the cheek, with a ragged edge.
+    const asym = clamp01(m.blazeAsymmetry ?? 0);
+    const kL = 1 + asym * 0.5;
+    const kR = 1 - asym * 0.22;
     ctx.save();
     ctx.fillStyle = pal.baseWhite;
     ctx.filter = `blur(${(0.6 + m.blazeSoftness * 3.4).toFixed(2)}px)`;
     ctx.beginPath();
     ctx.moveTo(cx, topY);
-    ctx.quadraticCurveTo(cx + hwEye * 0.6, (topY + ey) / 2, cx + hwEye, ey);
-    ctx.quadraticCurveTo(cx + hwNose * 0.8, R.y + T.noseY - 10, cx + hwNose, R.y + T.noseY + 2);
+    ctx.quadraticCurveTo(cx + hwEye * 0.6 * kR, (topY + ey) / 2, cx + hwEye * kR, ey);
+    ctx.quadraticCurveTo(cx + hwNose * 0.8 * kR, R.y + T.noseY - 10, cx + hwNose * kR, R.y + T.noseY + 2);
     ctx.lineTo(cx + 46, R.y + 150);
     ctx.lineTo(cx + 60, R.y + 200);
     ctx.lineTo(cx - 60, R.y + 200);
     ctx.lineTo(cx - 46, R.y + 150);
-    ctx.lineTo(cx - hwNose, R.y + T.noseY + 2);
-    ctx.quadraticCurveTo(cx - hwNose * 0.8, R.y + T.noseY - 10, cx - hwEye, ey);
-    ctx.quadraticCurveTo(cx - hwEye * 0.6, (topY + ey) / 2, cx, topY);
+    if (asym > 0.05) {
+      // ragged cheek edge on the wide side
+      ctx.lineTo(cx - hwNose * kL - 6 * asym, R.y + T.noseY + 14);
+      ctx.lineTo(cx - hwNose * kL + 2, R.y + T.noseY + 8);
+      ctx.lineTo(cx - hwNose * kL - 4 * asym, R.y + T.noseY + 2);
+    }
+    ctx.lineTo(cx - hwNose * kL, R.y + T.noseY + 2);
+    ctx.quadraticCurveTo(cx - hwNose * 0.8 * kL, R.y + T.noseY - 10, cx - hwEye * kL, ey);
+    ctx.quadraticCurveTo(cx - hwEye * 0.6 * kL, (topY + ey) / 2, cx, topY);
     ctx.closePath();
     ctx.fill();
-    // whisker pads
+    // whisker pads (and, on a wide blaze, the cheeks)
     for (const sx of [-1, 1]) {
+      const k = sx < 0 ? kL : kR;
       ctx.beginPath();
-      ctx.ellipse(cx + sx * 18, R.y + T.muzzleY, 20 + blazeW * 5, 16, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + sx * 18 * k, R.y + T.muzzleY, (20 + blazeW * 5) * k, 16 + blazeW * 3 * (k - 1) * 4, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.beginPath();

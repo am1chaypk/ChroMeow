@@ -38,6 +38,26 @@
       </section>
       <p class="shelf__hint" data-i18n="playHint">Pick a toy, then play on the page with the left mouse button.</p>
 
+      <section class="station" id="station" aria-labelledby="stationTitle">
+        <div class="station__head">
+          <h2 class="station__title" id="stationTitle" data-i18n="station">Food &amp; water</h2>
+          <input class="switch switch--sm" type="checkbox" id="stationOn" data-i18n-title="stationShow" aria-labelledby="stationTitle" />
+        </div>
+        <div class="bowl bowl--food">
+          <span class="bowl__label" id="foodLabel" data-i18n="food">Food</span>
+          <span class="bowl__track" role="meter" aria-labelledby="foodLabel" aria-valuemin="0" aria-valuemax="100" id="foodMeter"><span class="bowl__fill" id="foodFill"></span></span>
+          <span class="bowl__pct" id="foodPct"></span>
+          <button class="bowl__btn" type="button" id="refillFood"><span data-i18n="refillFood">Refill food</span> <span aria-hidden="true">🍖</span></button>
+        </div>
+        <div class="bowl bowl--water">
+          <span class="bowl__label" id="waterLabel" data-i18n="water">Water</span>
+          <span class="bowl__track" role="meter" aria-labelledby="waterLabel" aria-valuemin="0" aria-valuemax="100" id="waterMeter"><span class="bowl__fill" id="waterFill"></span></span>
+          <span class="bowl__pct" id="waterPct"></span>
+          <button class="bowl__btn" type="button" id="refillWater"><span data-i18n="refillWater">Refill water</span> <span aria-hidden="true">💧</span></button>
+        </div>
+        <p class="station__hint" data-i18n="stationHint">Click a bowl on the page to refill it, drag the mat to move it.</p>
+      </section>
+
       <section class="rows">
         <label class="row">
           <span class="row__text">
@@ -66,6 +86,10 @@
         <label class="row">
           <span class="row__text"><span class="row__title" data-i18n="names">Name tags</span></span>
           <input class="switch" type="checkbox" id="names" />
+        </label>
+        <label class="row">
+          <span class="row__text"><span class="row__title" id="idleTitle" data-i18n="idleCuddle">Cuddle up when I’m away</span></span>
+          <select class="select" id="idle" aria-labelledby="idleTitle"></select>
         </label>
         <label class="row">
           <span class="row__text"><span class="row__title" data-i18n="calm">Calm mode</span></span>

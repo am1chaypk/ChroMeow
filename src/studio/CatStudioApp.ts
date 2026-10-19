@@ -6,10 +6,10 @@
  * to chrome.storage.local, so cats on open tabs update live.
  */
 import { ALL_STATES, type CatState } from '../shared/catStates';
-import { lang, patternLabel, setLanguage, stateLabel, t, tf, translateDom } from '../shared/i18n';
-import { EXTRA_PRESETS, MAX_CATS, createCat1, createCat2, createFromTemplate, normalizeProfile } from '../shared/presets';
+import { displayName, lang, patternLabel, setLanguage, stateLabel, t, tf, translateDom } from '../shared/i18n';
+import { ALEX_ID, ANNA_ID, EXTRA_PRESETS, MAX_CATS, createFromBuiltin, createFromTemplate, normalizeProfile } from '../shared/presets';
 import { KEY_PROFILES, KEY_SETTINGS, loadProfiles, loadSettings, normalizeProfiles, normalizeSettings, patchSettings, resetToFactory, saveProfiles, withoutProfile } from '../shared/storage';
-import { COAT_PATTERNS, type CatProfile, type CoatMarkings, type CoatPalette, type CoatPattern, type Morphology, type Personality, type Settings, type SignatureBehaviors } from '../shared/types';
+import { COAT_PATTERNS, type CatProfile, type CatTraits, type CoatMarkings, type CoatPalette, type CoatPattern, type Morphology, type Personality, type Settings, type SignatureBehaviors } from '../shared/types';
 import { dataUrlToBytes } from '../shared/zip';
 import { rgbToHex, type RGB } from '../shared/color';
 import { uid } from '../shared/rng';
@@ -18,7 +18,7 @@ import { buildCoatTexture } from '../engine/CoatTexture';
 import { UV } from '../engine/UVLayout';
 import { PreviewSandbox } from './PreviewSandbox';
 import { CoatPainter } from './CoatPainter';
-import { SAMPLE_ROLES, analyzePhoto, averagePatch, interpretSamples, loadPhoto, thumbnail, type PixelSource, type SampleRole } from './PhotoColorExtractor';
+import { SAMPLE_ROLES, analyzePhoto, averagePatch, interpretSamples, loadPhoto, mergePalette, thumbnail, type PixelSource, type SampleRole } from './PhotoColorExtractor';
 import { bakeZip, downloadBlob, importSpriteFile, type ImportLayout } from './SpriteSheetBaker';
 import type { ToolKind } from '../sim/ToyTool';
 import { MAX_CAT_FILE_BYTES, exportFileName, mergeImported, parseCatFile, serializeCats } from '../shared/catFile';
@@ -88,10 +88,20 @@ interface Pin {
 const PALETTE_KEYS: (keyof CoatPalette)[] = ['baseWhite', 'undercoatWarm', 'tabbyBase', 'tabbyStripe', 'rufus', 'flankPatch', 'patchSecondary', 'noseLeather', 'pawPads', 'innerEar', 'eyeLeft', 'eyeRight', 'eyeRim'];
 const PALETTE_LABEL_KEY: Partial<Record<keyof CoatPalette, string>> = { flankPatch: 'flankPatchColor' };
 
-const MARKING_SLIDERS: (keyof CoatMarkings)[] = ['whiteAmount', 'blazeWidth', 'blazeSoftness', 'blazeHeight', 'eyeliner', 'cheekStripes', 'eyeHalo', 'frontLegWhite', 'hindLegWhite', 'stripeDensity'];
+const MARKING_SLIDERS: (keyof CoatMarkings)[] = ['whiteAmount', 'blazeWidth', 'blazeSoftness', 'blazeAsymmetry', 'blazeHeight', 'eyeliner', 'cheekStripes', 'eyeHalo', 'frontLegWhite', 'hindLegWhite', 'stripeDensity'];
 const MARKING_TOGGLES: (keyof CoatMarkings)[] = ['shoulderBand', 'flankPatch', 'rumpCrest', 'mMark', 'tailTipDark'];
 const PERSONALITY_LABEL: Record<keyof Personality, string> = { laziness: 'laziness', huntDrive: 'huntDrive', sociability: 'sociability', sassiness: 'sassiness', clumsiness: 'clumsiness', affection: 'affectionTrait' };
 const SIGNATURE_KEYS: (keyof SignatureBehaviors)[] = ['chinPropSleep', 'meltedLoafSleep', 'airplaneSquint', 'pillowSnuggler', 'widePawSplay'];
+/** Trait sliders: key, i18n label, range, step. */
+const TRAIT_SLIDERS: [Exclude<keyof CatTraits, 'bondedWith'>, string, number, number, number][] = [
+  ['hungerRateMultiplier', 'hungerRateMultiplier', 0.5, 2, 0.05],
+  ['thirstRateMultiplier', 'thirstRateMultiplier', 0.5, 2, 0.05],
+  ['playfulness', 'playTrait', 0, 1, 0.01],
+  ['pettingAffinity', 'pettingAffinity', 0.5, 2, 0.05],
+  ['earExpressiveness', 'earExpressiveness', 0, 1, 0.01],
+  ['socialInitiative', 'socialInitiative', 0, 1, 0.01],
+  ['sprawlLover', 'sprawlLover', 0, 1, 0.01],
+];
 
 class CatStudioApp {
   private profiles: CatProfile[] = [];
@@ -165,7 +175,7 @@ class CatStudioApp {
     this.scheduleSave();
   }
 
-  private updateNested<K extends 'palette' | 'markings' | 'morphology' | 'personality' | 'signature'>(key: K, field: string, value: unknown): void {
+  private updateNested<K extends 'palette' | 'markings' | 'morphology' | 'personality' | 'signature' | 'traits'>(key: K, field: string, value: unknown): void {
     const cur = this.current;
     this.update({ [key]: { ...(cur[key] as object), [field]: value } } as Partial<CatProfile>);
   }
@@ -277,7 +287,7 @@ class CatStudioApp {
         return;
       }
       const result = interpretSamples(samples, { whiteBalance: ($('whiteBalance') as HTMLInputElement).checked });
-      this.update({ palette: { ...this.current.palette, ...result.palette } });
+      this.update({ palette: mergePalette(this.current, result.palette) });
       this.renderCoat();
       msg.textContent = [t('samplesApplied'), result.whiteBalanced ? t('samplesBalanced') : '', result.skippedEyes.length ? t('eyesSkipped') : ''].filter(Boolean).join(' ');
     });
@@ -292,7 +302,7 @@ class CatStudioApp {
     });
     $('applySuggestion').addEventListener('click', () => {
       if (!this.analysis) return;
-      this.update({ palette: { ...this.current.palette, ...this.analysis.suggestion.palette } });
+      this.update({ palette: mergePalette(this.current, this.analysis.suggestion.palette) });
       this.renderCoat();
     });
     // Paint tools
@@ -360,7 +370,7 @@ class CatStudioApp {
         'li',
         { class: `cat-item${p.enabled ? '' : ' is-off'}`, 'aria-current': String(p.id === this.selectedId), tabindex: '0', 'data-id': p.id },
         canvas,
-        el('div', { class: 'cat-item__text' }, el('div', { class: 'cat-item__name', text: p.name }), el('div', { class: 'cat-item__meta', text: patternLabel(p.pattern) })),
+        el('div', { class: 'cat-item__text' }, el('div', { class: 'cat-item__name', text: displayName(p) }), el('div', { class: 'cat-item__meta', text: patternLabel(p.pattern) })),
         el('div', { class: 'cat-item__tools' }, toggle, remove),
       );
       const select = () => this.select(p.id);
@@ -391,7 +401,7 @@ class CatStudioApp {
   private updateRailItem(p: CatProfile): void {
     const item = $('catList').querySelector<HTMLElement>(`[data-id="${p.id}"]`);
     if (!item) return;
-    (item.querySelector('.cat-item__name') as HTMLElement).textContent = p.name;
+    (item.querySelector('.cat-item__name') as HTMLElement).textContent = displayName(p);
     (item.querySelector('.cat-item__meta') as HTMLElement).textContent = patternLabel(p.pattern);
     (item.querySelector('.cat-item__toggle') as HTMLInputElement).checked = p.enabled;
     item.classList.toggle('is-off', !p.enabled);
@@ -426,8 +436,8 @@ class CatStudioApp {
     const sel = $('addPreset') as HTMLSelectElement;
     sel.textContent = '';
     const he = lang() === 'he';
-    sel.append(el('option', { value: 'cat1-harlequin', text: he ? 'כמו חתול 1 (הרלקין)' : 'Like Cat 1 (harlequin)' }));
-    sel.append(el('option', { value: 'cat2-mantled', text: he ? 'כמו חתול 2 (גלימה)' : 'Like Cat 2 (mantled)' }));
+    sel.append(el('option', { value: ALEX_ID, text: t('templateAlex') }));
+    sel.append(el('option', { value: ANNA_ID, text: t('templateAnna') }));
     for (const p of EXTRA_PRESETS) sel.append(el('option', { value: p.key, text: he ? p.labelHe : p.label }));
   }
 
@@ -437,11 +447,8 @@ class CatStudioApp {
     let slot = 1;
     while (used.has(slot)) slot++;
     const key = ($('addPreset') as HTMLSelectElement).value;
-    let cat: CatProfile;
-    if (key === 'cat1-harlequin' || key === 'cat2-mantled') {
-      const base = key === 'cat1-harlequin' ? createCat1() : createCat2();
-      cat = { ...base, id: uid('cat'), slot, name: `Cat ${slot}`, presetKey: key };
-    } else cat = createFromTemplate(key, slot);
+    // Alex / Anna load as full templates (coat, markings, body and quirks) to inspect or customise.
+    const cat: CatProfile = createFromBuiltin(key, slot, uid('cat')) ?? createFromTemplate(key, slot);
     this.profiles.push(cat);
     this.profiles.sort((a, b) => a.slot - b.slot);
     this.selectedId = cat.id;
@@ -857,6 +864,18 @@ class CatStudioApp {
     for (const k of Object.keys(PERSONALITY_LABEL) as (keyof Personality)[]) {
       pers.append(sliderField(t(PERSONALITY_LABEL[k]), cur.personality[k], 0, 1, 0.01, (v) => this.updateNested('personality', k, v)));
     }
+    // Quirks: appetite, play, favourite petting spots, ears, cuddles, and who this cat is bonded with.
+    pers.append(el('h3', { class: 'group-title', text: t('traits') }));
+    for (const [k, label, min, max, step] of TRAIT_SLIDERS) {
+      const fmt = max > 1 ? (v: number) => `${v.toFixed(2)}×` : (v: number) => v.toFixed(2);
+      pers.append(sliderField(t(label), cur.traits[k], min, max, step, (v) => this.updateNested('traits', k, v), fmt));
+    }
+    const bond = el('select', { 'aria-label': t('bondedWith') }) as HTMLSelectElement;
+    bond.append(el('option', { value: '', text: t('nobody') }));
+    for (const p of this.profiles) if (p.id !== cur.id) bond.append(el('option', { value: p.id, text: displayName(p) }));
+    bond.value = this.profiles.some((p) => p.id === cur.traits.bondedWith) ? cur.traits.bondedWith : '';
+    bond.addEventListener('change', () => this.updateNested('traits', 'bondedWith', bond.value));
+    pers.append(el('div', { class: 'field field--wide' }, el('span', { class: 'field__label', text: t('bondedWith') }), bond));
   }
 
   /* ------------------------------------------------------------- sprites */

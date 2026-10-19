@@ -7,16 +7,23 @@
  *    reports the element and an estimated caret position so a curious cat can
  *    come and watch the caret move (KEYBOARD_WATCH).
  *
+ *  • Activity: any pointer, key, wheel or scroll input marks the user as
+ *    present (for the idle cuddle); window blur / pointercancel end a drag.
+ *
  * No keystroke content is stored or sent anywhere — only "typing happened here".
  */
 import type { Vec2 } from '../shared/math';
 
 export interface InputCallbacks {
   move(x: number, y: number, t: number): void;
-  down(x: number, y: number): void;
+  down(x: number, y: number, e: PointerEvent): void;
   up(x: number, y: number): void;
   leave(): void;
   typing(el: HTMLElement, caret: Vec2): void;
+  /** Pointer cancelled or the window lost focus (drop anything being dragged). */
+  cancel?(): void;
+  /** The user did something (moved, clicked, typed, scrolled). */
+  activity?(): void;
 }
 
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number', '']);
@@ -73,11 +80,17 @@ export function caretPosition(el: HTMLElement): Vec2 {
 export class InputInterceptor {
   private readonly opts: AddEventListenerOptions = { passive: true, capture: true };
   private readonly onMove = (e: PointerEvent) => {
+    this.cb.activity?.();
     if (e.pointerType === 'touch' && e.buttons === 0) return;
     this.cb.move(e.clientX, e.clientY, performance.now() / 1000);
   };
-  private readonly onDown = (e: PointerEvent) => this.cb.down(e.clientX, e.clientY);
+  private readonly onDown = (e: PointerEvent) => {
+    this.cb.activity?.();
+    this.cb.down(e.clientX, e.clientY, e);
+  };
   private readonly onUp = (e: PointerEvent) => this.cb.up(e.clientX, e.clientY);
+  private readonly onCancel = () => this.cb.cancel?.();
+  private readonly onActivity = () => this.cb.activity?.();
   private readonly onOut = (e: PointerEvent) => {
     if (!e.relatedTarget) this.cb.leave();
   };
@@ -86,6 +99,7 @@ export class InputInterceptor {
     if (isEditable(el)) this.cb.typing(el, caretPosition(el));
   };
   private readonly onKey = (e: KeyboardEvent) => {
+    this.cb.activity?.();
     const el = (e.composedPath()[0] as EventTarget | undefined) ?? document.activeElement;
     if (isEditable(el ?? null) && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter')) {
       requestAnimationFrame(() => this.cb.typing(el as HTMLElement, caretPosition(el as HTMLElement)));
@@ -101,6 +115,10 @@ export class InputInterceptor {
     window.addEventListener('pointerout', this.onOut, this.opts);
     window.addEventListener('input', this.onInput, this.opts);
     window.addEventListener('keydown', this.onKey, this.opts);
+    window.addEventListener('pointercancel', this.onCancel, this.opts);
+    window.addEventListener('blur', this.onCancel);
+    window.addEventListener('wheel', this.onActivity, this.opts);
+    window.addEventListener('scroll', this.onActivity, this.opts);
   }
 
   stop(): void {
@@ -110,5 +128,9 @@ export class InputInterceptor {
     window.removeEventListener('pointerout', this.onOut, this.opts);
     window.removeEventListener('input', this.onInput, this.opts);
     window.removeEventListener('keydown', this.onKey, this.opts);
+    window.removeEventListener('pointercancel', this.onCancel, this.opts);
+    window.removeEventListener('blur', this.onCancel);
+    window.removeEventListener('wheel', this.onActivity, this.opts);
+    window.removeEventListener('scroll', this.onActivity, this.opts);
   }
 }

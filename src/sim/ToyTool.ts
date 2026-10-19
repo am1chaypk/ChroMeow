@@ -13,11 +13,13 @@ import type { World } from './World';
 export type ToolKind = ToyKind;
 export const TOOL_KINDS: readonly ToolKind[] = ['treat', 'laser', 'ball'];
 
-interface Sample {
+export interface MotionSample {
   x: number;
   y: number;
   t: number;
 }
+
+type Sample = MotionSample;
 
 /** Velocity (px/s) of the most recent ~90 ms of pointer motion. */
 export function releaseVelocity(samples: readonly Sample[], window = 0.09): { vx: number; vy: number } {

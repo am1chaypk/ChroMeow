@@ -3,12 +3,22 @@
  *  • chrome.storage.local   — profiles (incl. painted masks & sprite sheets) and settings
  *  • chrome.storage.session — the live cross-tab world snapshot (service worker only)
  */
-import { defaultProfiles, normalizeProfile, MAX_CATS } from './presets';
-import type { CatProfile, Settings, WorldSnapshot } from './types';
+import { defaultProfiles, migrateProfile, normalizeProfile, MAX_CATS } from './presets';
+import type { CatProfile, FeedingStation, Settings, WorldSnapshot } from './types';
 
 export const KEY_PROFILES = 'chromeow:profiles';
 export const KEY_SETTINGS = 'chromeow:settings';
 export const KEY_WORLD = 'chromeow:world';
+export const KEY_STATION = 'chromeow:station';
+
+export const DEFAULT_STATION: FeedingStation = {
+  enabled: true,
+  xNormalized: 0.9,
+  foodLevel: 80,
+  waterLevel: 80,
+};
+
+export const IDLE_THRESHOLD_RANGE: readonly [number, number] = [30, 1800];
 
 export const DEFAULT_SETTINGS: Settings = {
   clickThroughLock: false,
@@ -20,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
   showNameTags: true,
   calmMode: false,
+  idleThreshold: 120,
 };
 
 function hasChromeStorage(): boolean {
@@ -51,15 +62,32 @@ export function normalizeSettings(raw: unknown): Settings {
     blacklist: Array.isArray(s.blacklist) ? s.blacklist.filter((h) => typeof h === 'string') : [],
     volume: typeof s.volume === 'number' ? Math.min(1, Math.max(0, s.volume)) : DEFAULT_SETTINGS.volume,
     catScale: typeof s.catScale === 'number' ? Math.min(1.8, Math.max(0.5, s.catScale)) : DEFAULT_SETTINGS.catScale,
+    idleThreshold:
+      typeof s.idleThreshold === 'number' && Number.isFinite(s.idleThreshold)
+        ? Math.round(Math.min(IDLE_THRESHOLD_RANGE[1], Math.max(IDLE_THRESHOLD_RANGE[0], s.idleThreshold)))
+        : DEFAULT_SETTINGS.idleThreshold,
+  };
+}
+
+function level(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : fallback;
+}
+
+export function normalizeStation(raw: unknown): FeedingStation {
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<FeedingStation>;
+  return {
+    enabled: typeof s.enabled === 'boolean' ? s.enabled : DEFAULT_STATION.enabled,
+    xNormalized: typeof s.xNormalized === 'number' && Number.isFinite(s.xNormalized) ? Math.min(1, Math.max(0, s.xNormalized)) : DEFAULT_STATION.xNormalized,
+    foodLevel: level(s.foodLevel, DEFAULT_STATION.foodLevel),
+    waterLevel: level(s.waterLevel, DEFAULT_STATION.waterLevel),
   };
 }
 
 export function normalizeProfiles(raw: unknown): CatProfile[] {
   if (!Array.isArray(raw) || raw.length === 0) return defaultProfiles();
-  const list = (raw as Partial<CatProfile>[])
-    .filter((p) => p && typeof p === 'object')
-    .slice(0, MAX_CATS)
-    .map((p, i) => normalizeProfile(p, typeof p.slot === 'number' ? p.slot : i + 1));
+  const valid = (raw as Partial<CatProfile>[]).filter((p) => p && typeof p === 'object').slice(0, MAX_CATS);
+  const taken = new Set(valid.map((p) => p.id).filter((id): id is string => typeof id === 'string'));
+  const list = valid.map((p, i) => normalizeProfile(migrateProfile(p, taken), typeof p.slot === 'number' ? p.slot : i + 1));
   list.sort((a, b) => a.slot - b.slot);
   return list;
 }
@@ -106,12 +134,23 @@ export async function removeProfile(id: string): Promise<CatProfile[]> {
   return next;
 }
 
-/** Writes factory defaults on first install without clobbering user data. */
+/** Writes factory defaults on first install (and migrates older data) without clobbering user data. */
 export async function ensureDefaults(): Promise<void> {
-  const [profiles, settings] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS)]);
+  const [profiles, settings, station] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS), localGet(KEY_STATION)]);
   if (!Array.isArray(profiles) || profiles.length === 0) await localSet(KEY_PROFILES, defaultProfiles());
   else await localSet(KEY_PROFILES, normalizeProfiles(profiles));
   await localSet(KEY_SETTINGS, normalizeSettings(settings));
+  await localSet(KEY_STATION, normalizeStation(station));
+}
+
+export async function loadStation(): Promise<FeedingStation> {
+  return normalizeStation(await localGet(KEY_STATION));
+}
+
+export async function patchStation(patch: Partial<FeedingStation>): Promise<FeedingStation> {
+  const next = normalizeStation({ ...(await loadStation()), ...patch });
+  await localSet(KEY_STATION, next);
+  return next;
 }
 
 export async function resetToFactory(): Promise<void> {

@@ -1,14 +1,18 @@
 /**
  * PopupController — status cards for each cat (live portrait, editable name,
- * state badge, energy/affection meters) plus toys, click-through lock, per-site
- * pause, sound and size controls. Talks to the active tab's content script and
- * to the service worker; never to the network.
+ * state badge, energy/affection meters) plus toys, the food & water station
+ * (levels, refill buttons, show / hide), click-through lock, per-site pause, the
+ * idle-cuddle delay, sound and size controls. Talks to the active tab's content
+ * script and to the service worker; never to the network.
  */
 import { isCatState, type CatState } from '../shared/catStates';
-import { lang, setLanguage, stateLabel, t, translateDom } from '../shared/i18n';
+import { displayName, lang, setLanguage, stateLabel, t, translateDom } from '../shared/i18n';
 import { sendRuntime, sendToTab, type HydrateResponse } from '../shared/messages';
-import { loadProfiles, loadSettings, patchProfile, patchSettings, removeProfile, hostnameMatches, KEY_PROFILES, normalizeProfiles } from '../shared/storage';
-import type { CatProfile, CatRuntimeSnapshot, PageInfo, PopupAction, Settings } from '../shared/types';
+import { loadProfiles, loadSettings, loadStation, patchProfile, patchSettings, patchStation, removeProfile, hostnameMatches, KEY_PROFILES, KEY_STATION, normalizeProfiles, normalizeStation } from '../shared/storage';
+import type { CatProfile, CatRuntimeSnapshot, FeedingStation, PageInfo, PopupAction, Settings } from '../shared/types';
+
+/** Idle-cuddle delays offered in the popup (seconds). */
+const IDLE_CHOICES = [30, 60, 120, 300, 600, 1800];
 import { CatPortrait } from '../engine/CatPortrait';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -31,12 +35,14 @@ class PopupController {
   private snapshots = new Map<string, CatRuntimeSnapshot>();
   private last = performance.now();
   private nameTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private station!: FeedingStation;
 
   async init(): Promise<void> {
     this.settings = await loadSettings();
     setLanguage(this.settings.language);
     translateDom();
     this.profiles = await loadProfiles();
+    this.station = await loadStation();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     this.tabId = tab?.id ?? null;
     if (this.tabId !== null) this.page = await sendToTab<PageInfo>(this.tabId, { type: 'cm:getPageInfo' });
@@ -46,6 +52,10 @@ class PopupController {
     await this.refreshWorld();
     setInterval(() => void this.refreshWorld(), 700);
     chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[KEY_STATION]) {
+        this.station = normalizeStation(changes[KEY_STATION].newValue);
+        this.renderStation();
+      }
       if (area !== 'local' || !changes[KEY_PROFILES]) return;
       const next = normalizeProfiles(changes[KEY_PROFILES].newValue);
       const shape = (l: CatProfile[]) => l.map((p) => `${p.id}:${p.enabled ? 1 : 0}`).join(',');
@@ -85,7 +95,7 @@ class PopupController {
       host.append(root);
       const canvas = root.querySelector('canvas') as HTMLCanvasElement;
       const name = root.querySelector('.cat__name') as HTMLInputElement;
-      name.value = prof.name;
+      name.value = displayName(prof);
       name.setAttribute('aria-label', t('name'));
       name.addEventListener('input', () => this.queueName(prof.id, name.value));
       (root.querySelector('.meter--energy .meter__label') as HTMLElement).textContent = t('energy');
@@ -244,14 +254,62 @@ class PopupController {
       this.settings = await patchSettings({ globalPause: (e.target as HTMLInputElement).checked });
       this.renderControls();
     });
+    $('stationOn').addEventListener('change', async (e) => {
+      this.station = await patchStation({ enabled: (e.target as HTMLInputElement).checked });
+      this.renderStation();
+    });
+    $('refillFood').addEventListener('click', async () => {
+      this.station = await patchStation({ foodLevel: 100, enabled: true });
+      this.renderStation();
+    });
+    $('refillWater').addEventListener('click', async () => {
+      this.station = await patchStation({ waterLevel: 100, enabled: true });
+      this.renderStation();
+    });
+    $('idle').addEventListener('change', async (e) => {
+      this.settings = await patchSettings({ idleThreshold: Number((e.target as HTMLSelectElement).value) });
+    });
     $('studio').addEventListener('click', () => {
       void chrome.runtime.openOptionsPage();
       window.close();
     });
   }
 
+  private renderStation(): void {
+    const st = this.station;
+    $('station').classList.toggle('is-off', !st.enabled);
+    ($('stationOn') as HTMLInputElement).checked = st.enabled;
+    for (const [kind, level] of [
+      ['food', st.foodLevel],
+      ['water', st.waterLevel],
+    ] as const) {
+      const pct = Math.round(level);
+      $(`${kind}Fill`).style.width = `${pct}%`;
+      $(`${kind}Pct`).textContent = `${pct}%`;
+      const meter = $(`${kind}Meter`);
+      meter.setAttribute('aria-valuenow', String(pct));
+      meter.closest('.bowl')?.classList.toggle('is-empty', pct <= 5);
+    }
+  }
+
+  private renderIdleChoices(): void {
+    const sel = $('idle') as HTMLSelectElement;
+    sel.textContent = '';
+    const cur = this.settings.idleThreshold;
+    const choices = IDLE_CHOICES.includes(cur) ? IDLE_CHOICES : [...IDLE_CHOICES, cur].sort((a, b) => a - b);
+    for (const sec of choices) {
+      const o = document.createElement('option');
+      o.value = String(sec);
+      o.textContent = sec < 60 ? `${t('idleAfter')} ${sec} ${t('secondsShort')}` : `${t('idleAfter')} ${Math.round(sec / 60)} ${t('minutesShort')}`;
+      sel.append(o);
+    }
+    sel.value = String(cur);
+  }
+
   private renderControls(): void {
     const s = this.settings;
+    this.renderStation();
+    this.renderIdleChoices();
     ($('lock') as HTMLInputElement).checked = s.clickThroughLock;
     $('lockSub').textContent = s.clickThroughLock ? t('clickThroughOn') : t('clickThroughOff');
     const host = this.page?.hostname ?? '';

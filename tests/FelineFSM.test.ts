@@ -17,6 +17,11 @@ describe('transition graph', () => {
   it('defines metadata and outgoing edges for every state', () => {
     for (const s of ALL_STATES) {
       expect(STATE_META[s]).toBeDefined();
+      // Being held is the one state a cat never leaves on its own (only by being let go).
+      if (s === 'SCRUFF_HELD') {
+        expect(TRANSITIONS[s]).toEqual([]);
+        continue;
+      }
       expect(TRANSITIONS[s].length).toBeGreaterThan(0);
       for (const n of TRANSITIONS[s]) expect(ALL_STATES).toContain(n);
     }
@@ -29,6 +34,14 @@ describe('transition graph', () => {
   it('every voluntary state is reachable from IDLE_SIT and every state can find its way back', () => {
     for (const s of ALL_STATES) {
       if (s === 'IDLE_SIT') continue;
+      if (s === 'SCRUFF_HELD') {
+        // Involuntary both ways: a hand picks the cat up from anything, letting go drops it.
+        expect(findPath('IDLE_SIT', s)).toBeNull();
+        expect(canTransition('CURLED_SLEEP', s)).toBe(true);
+        expect(canTransition(s, 'FALL_DESCEND')).toBe(true);
+        expect(findPath('FALL_DESCEND', 'IDLE_SIT')).not.toBeNull();
+        continue;
+      }
       if (s === 'STARTLED_AIRBORNE') {
         // Involuntary: only physics (a violent scroll, a vanished ledge) can startle a cat.
         expect(findPath('IDLE_SIT', s)).toBeNull();
@@ -42,7 +55,7 @@ describe('transition graph', () => {
   });
 
   it('never lets a sleeping cat reach an awake posture without the stretch (no squint shortcut)', () => {
-    const awake = ALL_STATES.filter((s) => !SLEEP_STATES.has(s) && s !== 'JUDGMENTAL_AIRPLANE_SQUINT' && s !== 'WAKE_ARCH_STRETCH' && STATE_META[s].posture !== 'air');
+    const awake = ALL_STATES.filter((s) => !SLEEP_STATES.has(s) && s !== 'JUDGMENTAL_AIRPLANE_SQUINT' && s !== 'WAKE_ARCH_STRETCH' && STATE_META[s].posture !== 'air' && STATE_META[s].posture !== 'held');
     for (const sleep of SLEEP_STATES) {
       for (const target of awake) {
         const path = findPath(sleep, target) as CatState[];
@@ -144,5 +157,49 @@ describe('FelineFSM', () => {
     const fsm = new FelineFSM('IDLE_SIT', 1);
     fsm.restore('ZOOMIES_SPRINT');
     expect(fsm.current).toBe('IDLE_STAND');
+  });
+});
+
+describe('v2 states: scruff hold, meals, cuddle sleep', () => {
+  it('picks a cat up by the scruff from any state, and only physics can enter it', () => {
+    for (const from of ['CURLED_SLEEP', 'EATING', 'ZOOMIES_SPRINT', 'JUMP_ASCEND', 'BELLY_UP_ROLL', 'CUDDLE_SLEEP'] as CatState[]) {
+      const fsm = new FelineFSM(from, 2);
+      expect(fsm.force('SCRUFF_HELD')).toBe(true);
+      expect(fsm.current).toBe('SCRUFF_HELD');
+    }
+    const fsm = new FelineFSM('IDLE_SIT', 2);
+    expect(fsm.request('SCRUFF_HELD')).toBe(false);
+    expect(fsm.current).toBe('IDLE_SIT');
+  });
+
+  it('holds SCRUFF_HELD until released: plans cannot wriggle out, letting go means falling then landing', () => {
+    const fsm = new FelineFSM('IDLE_STAND', 4);
+    fsm.force('SCRUFF_HELD');
+    expect(fsm.request('IDLE_SIT')).toBe(false);
+    for (let i = 0; i < 100; i++) fsm.update(0.05);
+    expect(fsm.current).toBe('SCRUFF_HELD');
+    expect(fsm.force('IDLE_SIT')).toBe(false);
+    expect(fsm.force('FALL_DESCEND')).toBe(true);
+    expect(fsm.force('LAND_RECOVERY')).toBe(true);
+    runUntil(fsm, 'IDLE_STAND', 2);
+    expect(fsm.current).toBe('IDLE_STAND');
+    expect(isPhysicsInterrupt('SCRUFF_HELD', 'LAND_RECOVERY')).toBe(true);
+    expect(isPhysicsInterrupt('SCRUFF_HELD', 'SAUNTER_WALK')).toBe(false);
+    expect(restorableState('SCRUFF_HELD')).toBe('IDLE_STAND');
+  });
+
+  it('wakes from the cuddle through blink-stretch-yawn', () => {
+    expect(findPath('CUDDLE_SLEEP', 'IDLE_SIT')).toEqual(['CUDDLE_SLEEP', 'WAKE_ARCH_STRETCH', 'BIG_YAWN', 'IDLE_SIT']);
+    expect(SLEEP_STATES.has('CUDDLE_SLEEP')).toBe(true);
+    expect(findPath('CAT_LOAF', 'CUDDLE_SLEEP')).toEqual(['CAT_LOAF', 'CUDDLE_SLEEP']);
+  });
+
+  it('eats and drinks standing at the bowl, then sits down to wash', () => {
+    expect(canTransition('IDLE_STAND', 'EATING')).toBe(true);
+    expect(canTransition('IDLE_STAND', 'DRINKING')).toBe(true);
+    expect(findPath('EATING', 'GROOM_WASH_FACE')).toEqual(['EATING', 'IDLE_SIT', 'GROOM_WASH_FACE']);
+    expect(findPath('IDLE_SIT', 'EMPTY_BOWL_WAIT')).toEqual(['IDLE_SIT', 'EMPTY_BOWL_WAIT']);
+    expect(STATE_META.SEEKING_FOOD.locomotion).toBe(true);
+    expect(STATE_META.SEEKING_WATER.locomotion).toBe(true);
   });
 });

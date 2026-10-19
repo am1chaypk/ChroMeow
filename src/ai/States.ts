@@ -6,11 +6,13 @@
  * (e.g. CURLED_SLEEP → SPRAWLED_SLEEP → WAKE_ARCH_STRETCH → BIG_YAWN → IDLE_SIT →
  * IDLE_STAND → SAUNTER_WALK). Physics may additionally *interrupt* into airborne
  * states (a startle or a fall), which is modelled as a separate edge set that
- * the planner never uses voluntarily.
+ * the planner never uses voluntarily. Being picked up by the scruff is such an
+ * interrupt too: any state can be grabbed into SCRUFF_HELD, and releasing it
+ * always drops the cat into FALL_DESCEND (or straight into LAND_RECOVERY).
  */
 import { ALL_STATES, AIRBORNE_STATES, SLEEP_STATES, type CatState } from '../shared/catStates';
 
-export type Posture = 'stand' | 'sit' | 'lie' | 'sleep' | 'air' | 'wall' | 'react';
+export type Posture = 'stand' | 'sit' | 'lie' | 'sleep' | 'air' | 'wall' | 'react' | 'held';
 
 export interface StateMeta {
   posture: Posture;
@@ -80,19 +82,28 @@ export const STATE_META: Record<CatState, StateMeta> = {
   LEDGE_CHIN_REST: m('lie'),
   WIDE_PAW_SPLAY: m('lie'),
   JUDGMENTAL_AIRPLANE_SQUINT: m('react', { duration: [2.4, 3.2], interruptible: false, next: 'RETURN' }),
+  SCRUFF_HELD: m('held', { interruptible: false }),
+  SEEKING_FOOD: m('stand', { locomotion: true, passThrough: 0.2 }),
+  EATING: m('stand', { passThrough: 0.5 }),
+  SEEKING_WATER: m('stand', { locomotion: true, passThrough: 0.2 }),
+  DRINKING: m('stand', { passThrough: 0.5 }),
+  EMPTY_BOWL_WAIT: m('sit', { passThrough: 0.5 }),
+  CUDDLE_SLEEP: m('sleep', { passThrough: 1.0 }),
 };
 
 const SLEEPS: CatState[] = [...SLEEP_STATES];
 
 /** Voluntary, biologically plausible transitions. */
 export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
-  CURLED_SLEEP: ['SPRAWLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT', 'YIN_YANG_CUDDLE_SLEEP', 'PILLOW_STACK_CUDDLE'],
+  CURLED_SLEEP: ['SPRAWLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT', 'YIN_YANG_CUDDLE_SLEEP', 'PILLOW_STACK_CUDDLE', 'CUDDLE_SLEEP'],
   SPRAWLED_SLEEP: ['WAKE_ARCH_STRETCH', 'CURLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT', 'TANDEM_BELLY_HOLD_SLEEP'],
   CHIN_PROP_SLEEP: ['WAKE_ARCH_STRETCH', 'SPRAWLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT'],
   MELTED_LOAF_SLEEP: ['WAKE_ARCH_STRETCH', 'CURLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT'],
   TANDEM_BELLY_HOLD_SLEEP: ['WAKE_ARCH_STRETCH', 'SPRAWLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT'],
   PILLOW_STACK_CUDDLE: ['WAKE_ARCH_STRETCH', 'CURLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT'],
   YIN_YANG_CUDDLE_SLEEP: ['CURLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT'],
+  // Wakes straight into the stretch → yawn chain (the idle wake-up greeting).
+  CUDDLE_SLEEP: ['WAKE_ARCH_STRETCH', 'CURLED_SLEEP', 'JUDGMENTAL_AIRPLANE_SQUINT'],
   // The squint only leads back to sleep (or into the normal wake-up stretch). Returning to an
   // awake resting state it came from is handled by FelineFSM's RETURN mechanism, so the planner
   // can never use the squint as a shortcut that skips the stretch-and-yawn wake chain.
@@ -117,9 +128,12 @@ export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
     'ALLOGROOMING',
     'ALLOGROOM_RECEIVE',
     'JUDGMENTAL_AIRPLANE_SQUINT',
+    'EMPTY_BOWL_WAIT',
   ],
   IDLE_STAND: [
     'IDLE_SIT',
+    // A good long stretch is welcome any time a cat is up and about (Alex's favourite).
+    'WAKE_ARCH_STRETCH',
     'SAUNTER_WALK',
     'TROT',
     'ZOOMIES_SPRINT',
@@ -137,6 +151,10 @@ export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
     'CAT_LOAF',
     'SPHINX_POSE',
     'KNEADING_BISCUITS',
+    'SEEKING_FOOD',
+    'SEEKING_WATER',
+    'EATING',
+    'DRINKING',
   ],
   CAT_LOAF: [
     'IDLE_SIT',
@@ -150,6 +168,7 @@ export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
     'ALLOGROOM_RECEIVE',
     'YIN_YANG_CUDDLE_SLEEP',
     'PILLOW_STACK_CUDDLE',
+    'CUDDLE_SLEEP',
     'DANGLE_PAWS',
     'LEDGE_CHIN_REST',
     'TAIL_LASH',
@@ -205,13 +224,24 @@ export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
   PLAY_TAG_CHASE: ['IDLE_STAND', 'TROT', 'CROUCH_PREP_JUMP', 'PLAY_WRESTLE', 'ZOOMIES_SPRINT'],
   PLAY_WRESTLE: ['IDLE_STAND', 'BELLY_UP_ROLL', 'PLAY_TAG_CHASE'],
   JEALOUSY_INTERVENTION: ['IDLE_STAND', 'IDLE_SIT'],
+  // Never entered voluntarily (see isPhysicsInterrupt).
+  SCRUFF_HELD: [],
+  SEEKING_FOOD: ['IDLE_STAND', 'SAUNTER_WALK', 'TROT', 'CROUCH_PREP_JUMP', 'EATING'],
+  SEEKING_WATER: ['IDLE_STAND', 'SAUNTER_WALK', 'TROT', 'CROUCH_PREP_JUMP', 'DRINKING'],
+  EATING: ['IDLE_STAND', 'IDLE_SIT'],
+  DRINKING: ['IDLE_STAND', 'IDLE_SIT'],
+  EMPTY_BOWL_WAIT: ['IDLE_SIT', 'IDLE_STAND', 'CURSOR_GAZE'],
 };
 
 /** Involuntary, physics-driven edges (startles, falls, landings). */
 export function isPhysicsInterrupt(from: CatState, to: CatState): boolean {
   const posture = STATE_META[from].posture;
+  // A hand can scoop a cat out of anything; letting go means falling (or landing at once).
+  if (to === 'SCRUFF_HELD') return from !== 'SCRUFF_HELD';
+  if (from === 'SCRUFF_HELD') return to === 'FALL_DESCEND' || to === 'LAND_RECOVERY' || to === 'STARTLED_AIRBORNE';
   if (to === 'STARTLED_AIRBORNE') return posture !== 'air' || from === 'JUMP_ASCEND';
-  if (to === 'FALL_DESCEND') return posture === 'stand' || posture === 'wall' || from === 'JUMP_ASCEND' || from === 'STARTLED_AIRBORNE' || from === 'EDGE_PEEK';
+  // Awake cats (standing, sitting or lying) can step / hop off a ledge; sleepers startle instead.
+  if (to === 'FALL_DESCEND') return posture === 'stand' || posture === 'sit' || posture === 'lie' || posture === 'wall' || from === 'JUMP_ASCEND' || from === 'STARTLED_AIRBORNE' || from === 'EDGE_PEEK';
   if (to === 'LAND_RECOVERY') return AIRBORNE_STATES.has(from);
   if (to === 'JUMP_ASCEND') return from === 'CROUCH_PREP_JUMP' || from === 'WALL_CLIMB';
   return false;
@@ -274,7 +304,11 @@ export function isAirborne(s: CatState): boolean {
 
 export function isGrounded(s: CatState): boolean {
   const p = STATE_META[s].posture;
-  return p !== 'air' && p !== 'wall';
+  return p !== 'air' && p !== 'wall' && p !== 'held';
+}
+
+export function isHeld(s: CatState): boolean {
+  return STATE_META[s].posture === 'held';
 }
 
 export function isLying(s: CatState): boolean {
@@ -289,7 +323,9 @@ export function isSitting(s: CatState): boolean {
 /** Restorable from a snapshot without a chain (transient states collapse to a calm neighbour). */
 export function restorableState(s: CatState): CatState {
   const meta = STATE_META[s];
-  if (meta.posture === 'air' || meta.posture === 'wall' || s === 'EDGE_PEEK') return 'IDLE_STAND';
+  if (meta.posture === 'air' || meta.posture === 'wall' || meta.posture === 'held' || s === 'EDGE_PEEK') return 'IDLE_STAND';
+  if (s === 'EATING' || s === 'DRINKING') return 'IDLE_STAND';
+  if (s === 'EMPTY_BOWL_WAIT') return 'IDLE_SIT';
   if (meta.duration) {
     if (meta.posture === 'sit') return 'IDLE_SIT';
     if (meta.posture === 'lie') return 'CAT_LOAF';

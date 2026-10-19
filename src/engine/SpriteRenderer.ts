@@ -69,6 +69,13 @@ const FAMILIES: Partial<Record<CatState, string[]>> = {
   ALLOGROOMING: ['groom', 'waving', 'idle'],
   ALLOGROOM_RECEIVE: ['happy', 'waiting', 'idle'],
   PLAY_WRESTLE: ['play', 'jumping', 'idle'],
+  SCRUFF_HELD: ['held', 'failed', 'waiting', 'idle'],
+  SEEKING_FOOD: ['trot', 'running', 'idle'],
+  SEEKING_WATER: ['trot', 'running', 'idle'],
+  EATING: ['eat', 'review', 'idle'],
+  DRINKING: ['drink', 'eat', 'review', 'idle'],
+  EMPTY_BOWL_WAIT: ['beg', 'sit', 'waiting', 'idle'],
+  CUDDLE_SLEEP: ['sleep', 'sleeping', 'waiting'],
 };
 
 interface ResolvedAnim {
@@ -214,6 +221,7 @@ export function spriteLandmarks(x: number, y: number, w: number, h: number, anch
     roll: 0,
     scale,
     backTop: { x, y: top + h * 0.3 },
+    scruff: { x: headX - facing * r * 1.1, y: headY + r * 0.2 },
   };
 }
 

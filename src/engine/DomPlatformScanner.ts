@@ -10,6 +10,11 @@
  * listeners re-measure geometry. Occlusion is verified with elementsFromPoint so
  * cats never stand on ledges hidden under sticky headers. The viewport bottom is
  * always present as the primary floor.
+ *
+ * Between measurements (every 50 ms while scrolling) the cached ledges are shifted
+ * by the scroll delta, so landing tests never use stale positions; elements that
+ * are fixed or sticky (they don't scroll) are left in place. While the user is
+ * away (idle cuddle) discovery and measuring run four times less often.
  */
 import { buildPlatforms, makeFloor, type Platform, type PlatformCandidate, type PlatformSource, type WorldBounds } from './Physics';
 
@@ -58,6 +63,18 @@ interface CandidateInfo {
   warm: number;
   /** Result of the last occlusion test (true = top edge actually visible). */
   unoccluded: boolean;
+  /** position: fixed / sticky on the element or an ancestor: it doesn't move with the page. */
+  fixed: boolean;
+}
+
+function isPinned(el: Element): boolean {
+  let n: Element | null = el;
+  for (let depth = 0; n && n !== document.body && n !== document.documentElement && depth < 14; depth++) {
+    const pos = getComputedStyle(n).position;
+    if (pos === 'fixed' || pos === 'sticky') return true;
+    n = n.parentElement;
+  }
+  return false;
 }
 
 function warmthFor(el: Element): number {
@@ -105,6 +122,11 @@ export class DomPlatformScanner implements PlatformSource {
   private lastScroll = -Infinity;
   private idleHandle: number | null = null;
   private running = false;
+  /** Scroll position when `list` was measured, and the shifted copy for the current scroll. */
+  private measuredScroll = { x: 0, y: 0 };
+  private shifted: { key: string; list: Platform[] } | null = null;
+  /** Slower discovery / measuring while nobody is at the computer. */
+  private throttle = 1;
   private readonly onScroll = () => {
     this.geometryDirty = true;
     this.occlusionDirty = true;
@@ -180,15 +202,36 @@ export class DomPlatformScanner implements PlatformSource {
   }
 
   platforms(): readonly Platform[] {
-    return this.list;
+    const sx = window.scrollX;
+    const sy = window.scrollY;
+    const dx = sx - this.measuredScroll.x;
+    const dy = sy - this.measuredScroll.y;
+    if ((dx === 0 && dy === 0) || this.list.length === 0) return this.list;
+    const key = `${sx},${sy},${this.lastMeasure}`;
+    if (this.shifted?.key === key) return this.shifted.list;
+    const list = this.list.map((p) => {
+      const info = p.elementRef ? this.info.get(p.elementRef) : undefined;
+      return info?.fixed ? p : { ...p, y: p.y - dy, xMin: p.xMin - dx, xMax: p.xMax - dx };
+    });
+    this.shifted = { key, list };
+    return list;
+  }
+
+  scrollOffset(): { x: number; y: number } {
+    return { x: window.scrollX, y: window.scrollY };
+  }
+
+  /** Throttles discovery and measuring (×4 slower) while the user is idle. */
+  setThrottled(on: boolean): void {
+    this.throttle = on ? 4 : 1;
   }
 
   /** Called every animation frame by the world loop. */
   update(now: number): void {
     if (!this.running) return;
-    if (this.discoveryDirty && now - this.lastDiscovery > DISCOVERY_INTERVAL) this.scheduleDiscovery();
+    if (this.discoveryDirty && now - this.lastDiscovery > DISCOVERY_INTERVAL * this.throttle) this.scheduleDiscovery();
     const scrolling = now - this.lastScroll < 160;
-    const interval = scrolling ? SCROLL_MEASURE_INTERVAL : MEASURE_INTERVAL;
+    const interval = (scrolling ? SCROLL_MEASURE_INTERVAL : MEASURE_INTERVAL) * this.throttle;
     if (this.geometryDirty && now - this.lastMeasure > interval) {
       // Skip the (more expensive) occlusion test while the user is mid-scroll.
       this.measure(now, !scrolling && this.occlusionDirty);
@@ -221,7 +264,7 @@ export class DomPlatformScanner implements PlatformSource {
     const existing = this.info.get(el);
     if (existing) return existing.id;
     const id = `p${++this.counter}`;
-    this.info.set(el, { id, tag: el.tagName.toLowerCase(), warm: warmthFor(el), unoccluded: true });
+    this.info.set(el, { id, tag: el.tagName.toLowerCase(), warm: warmthFor(el), unoccluded: true, fixed: isPinned(el) });
     this.byId.set(id, el);
     this.io?.observe(el);
     this.geometryDirty = true;
@@ -298,6 +341,8 @@ export class DomPlatformScanner implements PlatformSource {
   private measure(now: number, withOcclusion: boolean): void {
     this.lastMeasure = now;
     this.geometryDirty = false;
+    this.measuredScroll = { x: window.scrollX, y: window.scrollY };
+    this.shifted = null;
     const b = this.bounds();
     const candidates: PlatformCandidate[] = [];
     for (const el of this.onScreen) {
