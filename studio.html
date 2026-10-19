@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChroMeow Cat Studio</title>
+    <link rel="icon" href="/icons/icon32.png" />
+    <link rel="stylesheet" href="./src/studio/studio.css" />
+  </head>
+  <body>
+    <div class="studio">
+      <header class="top">
+        <img class="top__logo" src="/icons/icon48.png" alt="" width="40" height="40" />
+        <div class="top__titles">
+          <h1 class="top__title" data-i18n="studioTitle">Cat Studio</h1>
+          <p class="top__sub" data-i18n="studioSubtitle">Turn photos of your real cats into living desktop cats.</p>
+        </div>
+        <div class="top__actions">
+          <span class="save-state" id="saveState" role="status" aria-live="polite"></span>
+          <button class="btn btn--pill" id="lang" type="button" data-i18n="language">עברית</button>
+          <button class="btn btn--quiet" id="reset" type="button" data-i18n="resetFactory">Reset to factory cats</button>
+        </div>
+      </header>
+
+      <aside class="rail" aria-labelledby="railTitle">
+        <h2 class="rail__title" id="railTitle" data-i18n="cats">Cats</h2>
+        <ol class="rail__list" id="catList"></ol>
+        <div class="rail__add">
+          <select id="addPreset" aria-label="Preset"></select>
+          <button class="btn" id="addCat" type="button" data-i18n="addCat">Add cat</button>
+        </div>
+        <p class="rail__hint" data-i18n="maxCats">Up to 6 cats</p>
+      </aside>
+
+      <main class="main">
+        <section class="stage" aria-labelledby="stageTitle">
+          <div class="stage__bar">
+            <h2 class="stage__title" id="stageTitle" data-i18n="preview">Live preview</h2>
+            <label class="check"><input type="checkbox" id="showBoth" checked /><span data-i18n="showBoth">Show both cats</span></label>
+            <span class="stage__spacer"></span>
+            <select id="stateSelect" aria-label="State"></select>
+            <button class="btn" id="triggerBtn" type="button" data-i18n="triggerState">Trigger a state</button>
+            <span class="stage__toys">
+              <button class="icon-btn" type="button" data-toy="treat" data-i18n-title="feed" title="Drop treat"><svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="14" cy="17" rx="9" ry="6" fill="#C9803E" /><path d="M21 17l7-5v10z" fill="#C9803E" /></svg></button>
+              <button class="icon-btn" type="button" data-toy="laser" data-i18n-title="laser" title="Laser"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#FF3B3B" opacity=".2" /><circle cx="16" cy="16" r="3" fill="#FF3B3B" /></svg></button>
+              <button class="icon-btn" type="button" data-toy="ball" data-i18n-title="ball" title="Ball"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#D9435E" /><path d="M10 12c4 3 8 3 12 0M10 20c4-3 8-3 12 0" stroke="#FFE08A" stroke-width="2" fill="none" /></svg></button>
+            </span>
+          </div>
+          <canvas class="stage__canvas" id="preview"></canvas>
+          <p class="stage__hint" data-i18n="previewHint">Pet your cat with the mouse or trigger any state.</p>
+        </section>
+
+        <nav class="tabs" role="tablist" aria-label="Sections">
+          <button class="tab" role="tab" type="button" data-tab="photos" aria-selected="true" data-i18n="photos">Photos</button>
+          <button class="tab" role="tab" type="button" data-tab="coat" aria-selected="false" data-i18n="coat">Coat &amp; markings</button>
+          <button class="tab" role="tab" type="button" data-tab="paint" aria-selected="false" data-i18n="paint">Paint brush</button>
+          <button class="tab" role="tab" type="button" data-tab="body" aria-selected="false" data-i18n="personality">Personality</button>
+          <button class="tab" role="tab" type="button" data-tab="sprites" aria-selected="false" data-i18n="sprites">Sprite sheets</button>
+        </nav>
+
+        <section class="panel" role="tabpanel" data-panel="photos">
+          <div class="photos">
+            <div class="photos__work">
+              <label class="drop" id="photoDrop">
+                <input type="file" id="photoInput" accept="image/png,image/jpeg,image/webp" multiple hidden />
+                <span class="drop__text" data-i18n="photosHint">Drop 1–3 photos of this cat.</span>
+                <span class="btn btn--primary" data-i18n="choosePhotos">Choose photos</span>
+              </label>
+              <div class="thumbs" id="thumbs"></div>
+              <div class="photo-stage" id="photoStage">
+                <canvas id="photoCanvas" class="photo-stage__canvas"></canvas>
+                <div class="pins" id="pins"></div>
+              </div>
+            </div>
+            <div class="photos__tools">
+              <h3 data-i18n="sampler">Anatomical sampler</h3>
+              <p class="hint" data-i18n="samplerHint">Pick a body part, then click on the photo.</p>
+              <div class="roles" id="roles" role="radiogroup"></div>
+              <label class="check"><input type="checkbox" id="whiteBalance" checked /><span data-i18n="whiteBalance">Correct lamp colour using the white fur</span></label>
+              <button class="btn btn--primary" id="applySamples" type="button" data-i18n="applySamples">Apply sampled colours</button>
+              <p class="status" id="sampleMsg" role="status" aria-live="polite"></p>
+              <h3 data-i18n="autoPalette">Auto palette (K-Means)</h3>
+              <p class="hint" data-i18n="autoPaletteHint">Local colour clustering suggests the palette.</p>
+              <button class="btn" id="analyze" type="button" data-i18n="analyze">Analyze photo</button>
+              <div class="clusters" id="clusters"></div>
+              <button class="btn btn--primary" id="applySuggestion" type="button" data-i18n="applySuggestion" disabled>Apply suggestion</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" role="tabpanel" data-panel="coat" hidden>
+          <h3 data-i18n="pattern">Coat pattern</h3>
+          <div class="patterns" id="patterns"></div>
+          <div class="coat-cols">
+            <div>
+              <h3 data-i18n="palette">Palette</h3>
+              <div class="swatches" id="swatches"></div>
+            </div>
+            <div>
+              <h3 data-i18n="markings">Markings</h3>
+              <div class="fields" id="markings"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" role="tabpanel" data-panel="paint" hidden>
+          <div class="paint">
+            <div class="painter" id="painterHost"></div>
+            <div class="paint__tools">
+              <p class="hint" data-i18n="paintHint">Paint custom spots onto the UV template.</p>
+              <div class="field">
+                <span class="field__label" data-i18n="brushColor">Colour</span>
+                <input type="color" id="brushColor" value="#2A241E" />
+              </div>
+              <div class="quick" id="quickColors"></div>
+              <div class="field">
+                <span class="field__label" data-i18n="brushSize">Brush size</span>
+                <input type="range" id="brushSize" min="2" max="48" value="10" />
+              </div>
+              <div class="field">
+                <span class="field__label" data-i18n="brushOpacity">Opacity</span>
+                <input type="range" id="brushOpacity" min="0.1" max="1" step="0.05" value="0.9" />
+              </div>
+              <label class="check"><input type="checkbox" id="brushErase" /><span data-i18n="erase">Eraser</span></label>
+              <label class="check"><input type="checkbox" id="guides" checked /><span data-i18n="uvGuides">UV guides</span></label>
+              <button class="btn btn--quiet" id="clearPaint" type="button" data-i18n="clearPaint">Clear paint</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" role="tabpanel" data-panel="body" hidden>
+          <div class="body-cols">
+            <div class="fields" id="identity"></div>
+            <div class="fields" id="morph"></div>
+            <div class="fields" id="personality"></div>
+          </div>
+        </section>
+
+        <section class="panel" role="tabpanel" data-panel="sprites" hidden>
+          <p class="hint" data-i18n="spritesHint">Bake or import sprite sheets.</p>
+          <div class="btn-row">
+            <button class="btn btn--primary" id="bakeHD" type="button" data-i18n="bakeHD">Bake ChroMeow HD (.zip)</button>
+            <button class="btn" id="bakeOP" type="button" data-i18n="bakeOpenPets">Bake OpenPets 8×9 (.zip)</button>
+            <button class="btn" id="bakeWebp" type="button" data-i18n="bakeWebp">Download sheet (.webp)</button>
+          </div>
+          <div class="progress" id="bakeProgress" hidden><span class="progress__bar"></span></div>
+          <div class="import">
+            <label class="drop drop--small" id="spriteDrop">
+              <input type="file" id="spriteInput" accept=".zip,.png,.webp,image/png,image/webp,application/zip" hidden />
+              <span class="drop__text" data-i18n="importHint">Drop a .zip or a .png / .webp sheet here</span>
+            </label>
+            <div class="field">
+              <span class="field__label" data-i18n="layout">Sheet layout</span>
+              <select id="importLayout">
+                <option value="auto">Auto-detect</option>
+                <option value="openpets-v1">OpenPets V1 (8×9)</option>
+                <option value="openpets-v2">OpenPets V2 (8×11)</option>
+                <option value="chromeow-hd">ChroMeow HD</option>
+                <option value="legacy-9x8">Legacy (9×8)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field__label" data-i18n="renderMode">Render mode</span>
+            <div class="segmented" id="renderMode"></div>
+          </div>
+          <div class="sprite-info" id="spriteInfo"></div>
+          <p class="status" id="spriteMsg" role="status" aria-live="polite"></p>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="./src/studio/CatStudioApp.ts"></script>
+  </body>
+</html>
