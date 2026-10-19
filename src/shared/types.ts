@@ -234,4 +234,6 @@ export interface PageInfo {
   blacklisted: boolean;
   running: boolean;
   catCount: number;
+  /** Toy currently in hand on that page (left-click play mode), if any. */
+  playTool?: ToyKind | null;
 }

@@ -11,8 +11,30 @@ const EN: Dict = {
   energy: 'Energy',
   affection: 'Affection',
   mood: 'Mood',
-  noCats: 'No active cats. Enable one in Cat Studio.',
-  feed: 'Drop treat',
+  noCats: 'All cats are off. Switch one on above.',
+  catToggle: 'Show this cat on pages',
+  editCat: 'Edit in Cat Studio',
+  removeCatConfirm: 'Remove?',
+  keepOneCat: 'Keep at least one cat. You can switch it off instead.',
+  catOff: 'Off',
+  exportCat: 'Export this cat',
+  exportAll: 'Export all',
+  importCats: 'Import cats',
+  importedCats: '{n} imported.',
+  importSkipped: '{n} did not fit (up to 6 cats).',
+  importBad: 'That file is not a ChroMeow cat file.',
+  importTooBig: 'That file is too large to import.',
+  credit: 'Made by APK',
+  toolTreat: 'Treat',
+  toolLaser: 'Laser',
+  toolBall: 'Ball',
+  playTreat: 'Left-click anywhere to drop a treat.',
+  playLaser: 'Hold the left button to shine the laser.',
+  playBall: 'Press, drag and let go to throw the ball.',
+  playDone: 'Done',
+  playEsc: 'Esc or right-click to stop',
+  playHint: 'Pick a toy, then play on the page with the left mouse button.',
+  feed: 'Treats',
   laser: 'Laser pointer',
   ball: 'Toy ball',
   call: 'Call cats',
@@ -171,8 +193,30 @@ const HE: Dict = {
   energy: 'אנרגיה',
   affection: 'חיבה',
   mood: 'מצב',
-  noCats: 'אין חתולים פעילים. הפעילו אחד בסטודיו.',
-  feed: 'לזרוק חטיף',
+  noCats: 'כל החתולים כבויים. הדליקו אחד למעלה.',
+  catToggle: 'להציג את החתול בדפים',
+  editCat: 'עריכה בסטודיו',
+  removeCatConfirm: 'להסיר?',
+  keepOneCat: 'צריך להשאיר לפחות חתול אחד. אפשר לכבות אותו במקום.',
+  catOff: 'כבוי',
+  exportCat: 'ייצוא החתול',
+  exportAll: 'ייצוא הכול',
+  importCats: 'ייבוא חתולים',
+  importedCats: 'יובאו: {n}.',
+  importSkipped: '{n} לא נכנסו (עד 6 חתולים).',
+  importBad: 'הקובץ הזה אינו קובץ חתולים של ChroMeow.',
+  importTooBig: 'הקובץ גדול מדי לייבוא.',
+  credit: 'נוצר על ידי APK',
+  toolTreat: 'חטיף',
+  toolLaser: 'לייזר',
+  toolBall: 'כדור',
+  playTreat: 'לחיצה שמאלית בכל מקום מפילה חטיף.',
+  playLaser: 'החזיקו את הכפתור השמאלי כדי להאיר בלייזר.',
+  playBall: 'לחצו, גררו ושחררו כדי לזרוק את הכדור.',
+  playDone: 'סיום',
+  playEsc: 'Esc או לחיצה ימנית לסיום',
+  playHint: 'בחרו צעצוע ושחקו בדף עם הכפתור השמאלי של העכבר.',
+  feed: 'חטיפים',
   laser: 'פוינטר לייזר',
   ball: 'כדור צעצוע',
   call: 'לקרוא לחתולים',
@@ -451,6 +495,12 @@ export function setLanguage(pref: Language): 'en' | 'he' {
     document.documentElement.lang = current;
     document.documentElement.dir = current === 'he' ? 'rtl' : 'ltr';
   }
+  return current;
+}
+
+/** Selects the UI language without touching the host document (content scripts). */
+export function useLanguage(pref: Language): 'en' | 'he' {
+  current = resolveLanguage(pref);
   return current;
 }
 

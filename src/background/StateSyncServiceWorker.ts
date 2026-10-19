@@ -65,7 +65,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return true;
     }
     case 'cm:openStudio': {
-      void chrome.runtime.openOptionsPage();
+      void openStudio(msg.catId);
       sendResponse({ ok: true });
       return;
     }
@@ -75,6 +75,24 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     }
   }
 });
+
+/** Opens the Cat Studio (focused on one cat when `catId` is given), reusing an open Studio tab. */
+async function openStudio(catId?: string): Promise<void> {
+  const url = chrome.runtime.getURL(`studio.html${catId ? `#cat=${encodeURIComponent(catId)}` : ''}`);
+  try {
+    const base = chrome.runtime.getURL('studio.html');
+    const contexts = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.TAB] });
+    const open = contexts.find((c) => typeof c.tabId === 'number' && c.tabId >= 0 && (c.documentUrl ?? '').startsWith(base));
+    if (open && open.tabId !== undefined) {
+      const tab = await chrome.tabs.update(open.tabId, { active: true, url });
+      if (tab?.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
+      return;
+    }
+  } catch {
+    /* getContexts unavailable: fall through and open a fresh tab */
+  }
+  await chrome.tabs.create({ url });
+}
 
 chrome.commands.onCommand.addListener((command) => {
   if (command !== 'toggle-click-through') return;

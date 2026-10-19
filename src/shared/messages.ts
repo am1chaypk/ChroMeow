@@ -1,17 +1,18 @@
 /** Typed message contracts between content script, service worker and popup. */
-import type { PageInfo, PopupAction, WorldSnapshot } from './types';
+import type { PageInfo, PopupAction, ToyKind, WorldSnapshot } from './types';
 
 export type RuntimeMessage =
   | { type: 'cm:snapshot'; world: WorldSnapshot }
   | { type: 'cm:hydrate' }
   | { type: 'cm:getWorld' }
-  | { type: 'cm:openStudio' }
+  | { type: 'cm:openStudio'; catId?: string }
   | { type: 'cm:ping' };
 
 export type TabMessage =
   | { type: 'cm:action'; action: PopupAction }
   | { type: 'cm:getPageInfo' }
-  | { type: 'cm:applyWorld'; world: WorldSnapshot };
+  | { type: 'cm:applyWorld'; world: WorldSnapshot }
+  | { type: 'cm:play'; tool: ToyKind | null };
 
 export interface HydrateResponse {
   world: WorldSnapshot | null;

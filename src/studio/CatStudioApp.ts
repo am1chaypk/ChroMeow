@@ -8,7 +8,7 @@
 import { ALL_STATES, type CatState } from '../shared/catStates';
 import { lang, patternLabel, setLanguage, stateLabel, t, tf, translateDom } from '../shared/i18n';
 import { EXTRA_PRESETS, MAX_CATS, createCat1, createCat2, createFromTemplate, normalizeProfile } from '../shared/presets';
-import { KEY_PROFILES, KEY_SETTINGS, loadProfiles, loadSettings, normalizeProfiles, normalizeSettings, patchSettings, resetToFactory, saveProfiles } from '../shared/storage';
+import { KEY_PROFILES, KEY_SETTINGS, loadProfiles, loadSettings, normalizeProfiles, normalizeSettings, patchSettings, resetToFactory, saveProfiles, withoutProfile } from '../shared/storage';
 import { COAT_PATTERNS, type CatProfile, type CoatMarkings, type CoatPalette, type CoatPattern, type Morphology, type Personality, type Settings, type SignatureBehaviors } from '../shared/types';
 import { dataUrlToBytes } from '../shared/zip';
 import { rgbToHex, type RGB } from '../shared/color';
@@ -20,6 +20,8 @@ import { PreviewSandbox } from './PreviewSandbox';
 import { CoatPainter } from './CoatPainter';
 import { SAMPLE_ROLES, analyzePhoto, averagePatch, interpretSamples, loadPhoto, thumbnail, type PixelSource, type SampleRole } from './PhotoColorExtractor';
 import { bakeZip, downloadBlob, importSpriteFile, type ImportLayout } from './SpriteSheetBaker';
+import type { ToolKind } from '../sim/ToyTool';
+import { MAX_CAT_FILE_BYTES, exportFileName, mergeImported, parseCatFile, serializeCats } from '../shared/catFile';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -119,9 +121,12 @@ class CatStudioApp {
     this.sandbox = new PreviewSandbox($('preview') as HTMLCanvasElement, this.settings);
     this.painter = new CoatPainter((mask) => this.update({ paintMask: mask }, { skipPainter: true }));
     $('painterHost').append(this.painter.view);
+    const hashId = /(?:^|[#&])cat=([^&]+)/.exec(location.hash);
+    if (hashId && this.profiles.some((p) => p.id === decodeURIComponent(hashId[1]))) this.selectedId = decodeURIComponent(hashId[1]);
     this.bindStatic();
     this.renderAll();
     this.sandbox.start();
+    window.addEventListener('hashchange', () => this.selectFromHash());
     requestAnimationFrame(this.frame);
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
@@ -216,16 +221,36 @@ class CatStudioApp {
       this.renderAll();
     });
     $('addCat').addEventListener('click', () => this.addCat());
+    // Export / import
+    $('exportCat').addEventListener('click', () => this.exportCats([this.current]));
+    $('exportAll').addEventListener('click', () => this.exportCats(this.profiles));
+    const imp = $('importCats') as HTMLInputElement;
+    $('importBtn').addEventListener('click', () => imp.click());
+    imp.addEventListener('change', () => {
+      if (imp.files?.[0]) void this.importCats(imp.files[0]);
+      imp.value = '';
+    });
+    this.makeDropzone(document.querySelector('.rail') as HTMLElement, (files) => {
+      const f = files.find((x) => x.name.endsWith('.json') || x.type === 'application/json');
+      if (f) void this.importCats(f);
+    });
     $('showBoth').addEventListener('change', () => this.queueRefresh());
     $('triggerBtn').addEventListener('click', () => this.sandbox.trigger(($('stateSelect') as HTMLSelectElement).value as CatState));
+    // Toy buttons put a toy in your hand for the preview: left-click to play, again (or Esc) to put it down.
     document.querySelectorAll<HTMLButtonElement>('[data-toy]').forEach((b) =>
       b.addEventListener('click', () => {
-        const w = this.sandbox.world;
-        if (b.dataset.toy === 'treat') w.dropTreat();
-        else if (b.dataset.toy === 'laser') w.tossLaser();
-        else w.tossBall();
+        const kind = b.dataset.toy as ToolKind;
+        this.setPreviewTool(this.sandbox.tool.kind === kind ? null : kind);
       }),
     );
+    $('preview').addEventListener('contextmenu', (e) => {
+      if (!this.sandbox.tool.active) return;
+      e.preventDefault();
+      this.setPreviewTool(null);
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.sandbox.tool.active) this.setPreviewTool(null);
+    });
     document.querySelectorAll<HTMLButtonElement>('.tab').forEach((tab) =>
       tab.addEventListener('click', () => {
         document.querySelectorAll<HTMLButtonElement>('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === tab)));
@@ -326,20 +351,33 @@ class CatStudioApp {
     list.textContent = '';
     for (const p of this.profiles) {
       const canvas = el('canvas', { class: 'cat-item__portrait', width: '62', height: '48', 'aria-hidden': 'true' });
+      const toggle = el('input', { class: 'switch switch--sm cat-item__toggle', type: 'checkbox', title: t('catToggle'), 'aria-label': `${t('catToggle')}: ${p.name}` }) as HTMLInputElement;
+      toggle.checked = p.enabled;
+      const remove = el('button', { class: 'cat-item__remove', type: 'button', title: this.profiles.length > 1 ? t('removeCat') : t('keepOneCat'), 'aria-label': `${t('removeCat')}: ${p.name}` });
+      remove.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 3.5h5l.6 1.3H16v1.5H4V4.8h2.9l.6-1.3zM5.4 7.3h9.2l-.7 8.3a1 1 0 0 1-1 .9H7.1a1 1 0 0 1-1-.9l-.7-8.3z" fill="currentColor"/></svg>';
+      (remove as HTMLButtonElement).disabled = this.profiles.length <= 1;
       const item = el(
         'li',
-        { class: 'cat-item', 'aria-current': String(p.id === this.selectedId), tabindex: '0', 'data-id': p.id },
+        { class: `cat-item${p.enabled ? '' : ' is-off'}`, 'aria-current': String(p.id === this.selectedId), tabindex: '0', 'data-id': p.id },
         canvas,
-        el('div', {}, el('div', { class: 'cat-item__name', text: p.name }), el('div', { class: 'cat-item__meta', text: patternLabel(p.pattern) })),
-        el('span', { class: `cat-item__dot${p.enabled ? ' is-on' : ''}`, title: t('enabled') }),
+        el('div', { class: 'cat-item__text' }, el('div', { class: 'cat-item__name', text: p.name }), el('div', { class: 'cat-item__meta', text: patternLabel(p.pattern) })),
+        el('div', { class: 'cat-item__tools' }, toggle, remove),
       );
       const select = () => this.select(p.id);
       item.addEventListener('click', select);
       item.addEventListener('keydown', (e) => {
+        if (e.target !== item) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           select();
         }
+      });
+      // The switch and bin act on this cat without changing which one is being edited.
+      toggle.addEventListener('click', (e) => e.stopPropagation());
+      toggle.addEventListener('change', () => this.setEnabled(p.id, toggle.checked));
+      remove.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeCat(p.id);
       });
       list.append(item);
       requestAnimationFrame(() => {
@@ -355,7 +393,8 @@ class CatStudioApp {
     if (!item) return;
     (item.querySelector('.cat-item__name') as HTMLElement).textContent = p.name;
     (item.querySelector('.cat-item__meta') as HTMLElement).textContent = patternLabel(p.pattern);
-    (item.querySelector('.cat-item__dot') as HTMLElement).classList.toggle('is-on', p.enabled);
+    (item.querySelector('.cat-item__toggle') as HTMLInputElement).checked = p.enabled;
+    item.classList.toggle('is-off', !p.enabled);
   }
 
   private select(id: string): void {
@@ -410,13 +449,79 @@ class CatStudioApp {
     this.renderAll();
   }
 
+  private setPreviewTool(kind: ToolKind | null): void {
+    this.sandbox.tool.select(kind);
+    document.querySelectorAll<HTMLButtonElement>('[data-toy]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.toy === kind)));
+    const preview = $('preview');
+    preview.dataset.tool = kind ?? '';
+    const hint = document.querySelector('.stage__hint') as HTMLElement | null;
+    if (hint) hint.textContent = kind ? `${t(kind === 'treat' ? 'playTreat' : kind === 'laser' ? 'playLaser' : 'playBall')} ${t('playEsc')}.` : t('previewHint');
+  }
+
+  private exportCats(cats: CatProfile[]): void {
+    if (!cats.length) return;
+    downloadBlob(new Blob([serializeCats(cats)], { type: 'application/json' }), exportFileName(cats));
+  }
+
+  private async importCats(file: File): Promise<void> {
+    const msg = $('ioMsg');
+    if (file.size > MAX_CAT_FILE_BYTES) {
+      msg.textContent = t('importTooBig');
+      return;
+    }
+    let cats: CatProfile[];
+    try {
+      cats = parseCatFile(await file.text());
+    } catch {
+      msg.textContent = t('importBad');
+      return;
+    }
+    const res = mergeImported(this.profiles, cats);
+    const parts: string[] = [];
+    if (res.added.length) {
+      this.profiles = res.profiles;
+      this.selectedId = res.added[0].id;
+      this.scheduleSave();
+      this.renderAll();
+      parts.push(tf('importedCats', { n: res.added.map((c) => c.name).join(', ') }));
+    }
+    if (res.skipped) parts.push(tf('importSkipped', { n: res.skipped }));
+    msg.textContent = parts.join(' ');
+  }
+
   private removeCurrent(): void {
-    if (this.profiles.length <= 1 || !confirm(t('confirmRemove'))) return;
-    this.profiles = this.profiles.filter((p) => p.id !== this.selectedId);
-    this.portraits.delete(this.selectedId);
-    this.selectedId = this.profiles[0].id;
+    this.removeCat(this.selectedId);
+  }
+
+  private removeCat(id: string): void {
+    const cat = this.profiles.find((p) => p.id === id);
+    if (!cat || this.profiles.length <= 1) return;
+    if (!confirm(`${t('confirmRemove')}\n${cat.name}`)) return;
+    this.profiles = withoutProfile(this.profiles, id);
+    this.portraits.delete(id);
+    this.photos.delete(id);
+    this.pins.delete(id);
+    if (this.selectedId === id) this.selectedId = this.profiles[0].id;
     this.scheduleSave();
     this.renderAll();
+  }
+
+  private setEnabled(id: string, enabled: boolean): void {
+    const i = this.profiles.findIndex((p) => p.id === id);
+    if (i < 0) return;
+    this.profiles[i] = { ...this.profiles[i], enabled };
+    this.updateRailItem(this.profiles[i]);
+    if (id === this.selectedId) this.renderBody();
+    this.queueRefresh();
+    this.scheduleSave();
+  }
+
+  /** `studio.html#cat=<id>` (from the popup's Edit button) selects that cat. */
+  private selectFromHash(): void {
+    const m = /(?:^|[#&])cat=([^&]+)/.exec(location.hash);
+    if (!m) return;
+    const id = decodeURIComponent(m[1]);
+    if (this.profiles.some((p) => p.id === id)) this.select(id);
   }
 
   /* -------------------------------------------------------------- photos */

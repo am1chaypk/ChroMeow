@@ -345,7 +345,9 @@ export class SocialCoordinator implements SocialHooks {
     const now = env.now;
     // Validate running sessions.
     for (const s of [...this.sessions]) {
-      const broken = s.a.social?.sessionId !== s.id || s.b.social?.sessionId !== s.id;
+      // A partner switched off or removed mid-session ends it cleanly.
+      const gone = !agents.includes(s.a) || !agents.includes(s.b);
+      const broken = gone || s.a.social?.sessionId !== s.id || s.b.social?.sessionId !== s.id;
       const stale = now - s.started > s.maxDuration;
       const fell = s.a.isAirborne() && !s.a.plan.length;
       if (broken || stale || fell) {

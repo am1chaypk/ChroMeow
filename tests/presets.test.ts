@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PIEBALD_TABBY_PALETTE, createCat1, createCat2, defaultProfiles, normalizeProfile } from '../src/shared/presets';
-import { hostnameMatches, isBlacklisted, normalizeSettings } from '../src/shared/storage';
+import { hostnameMatches, isBlacklisted, normalizeSettings, withoutProfile } from '../src/shared/storage';
 
 describe('factory presets (dual-cat addendum)', () => {
   it('ships two active cats out of the box', () => {
@@ -56,6 +56,22 @@ describe('factory presets (dual-cat addendum)', () => {
     expect(p.name).toBe('מיצי');
     expect(p.markings.blazeWidth).toBe(0.1);
     expect(p.markings.shoulderBand).toBe(true);
+  });
+});
+
+describe('removing cats', () => {
+  it('removes the chosen cat and keeps the others in order', () => {
+    const cats = [createCat1(), createCat2(), { ...createCat2(), id: 'cat_x', slot: 3 }];
+    expect(withoutProfile(cats, 'cat_slot_2').map((c) => c.id)).toEqual(['cat_slot_1', 'cat_x']);
+  });
+
+  it('never removes the last cat (it can only be switched off)', () => {
+    const one = [createCat1()];
+    expect(withoutProfile(one, 'cat_slot_1')).toHaveLength(1);
+  });
+
+  it('ignores unknown ids', () => {
+    expect(withoutProfile(defaultProfiles(), 'nope')).toHaveLength(2);
   });
 });
 

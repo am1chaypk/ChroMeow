@@ -30,6 +30,14 @@
           <button class="btn" id="addCat" type="button" data-i18n="addCat">Add cat</button>
         </div>
         <p class="rail__hint" data-i18n="maxCats">Up to 6 cats</p>
+        <div class="rail__io">
+          <button class="btn btn--quiet" id="exportCat" type="button" data-i18n="exportCat">Export this cat</button>
+          <button class="btn btn--quiet" id="exportAll" type="button" data-i18n="exportAll">Export all</button>
+          <button class="btn btn--quiet" id="importBtn" type="button" data-i18n="importCats">Import cats</button>
+          <input id="importCats" type="file" accept=".json,application/json" hidden />
+        </div>
+        <p class="status rail__msg" id="ioMsg" role="status" aria-live="polite"></p>
+        <p class="credit" data-i18n="credit">Made by APK</p>
       </aside>
 
       <main class="main">
@@ -41,9 +49,9 @@
             <select id="stateSelect" aria-label="State"></select>
             <button class="btn" id="triggerBtn" type="button" data-i18n="triggerState">Trigger a state</button>
             <span class="stage__toys">
-              <button class="icon-btn" type="button" data-toy="treat" data-i18n-title="feed" title="Drop treat"><svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="14" cy="17" rx="9" ry="6" fill="#C9803E" /><path d="M21 17l7-5v10z" fill="#C9803E" /></svg></button>
-              <button class="icon-btn" type="button" data-toy="laser" data-i18n-title="laser" title="Laser"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#FF3B3B" opacity=".2" /><circle cx="16" cy="16" r="3" fill="#FF3B3B" /></svg></button>
-              <button class="icon-btn" type="button" data-toy="ball" data-i18n-title="ball" title="Ball"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#D9435E" /><path d="M10 12c4 3 8 3 12 0M10 20c4-3 8-3 12 0" stroke="#FFE08A" stroke-width="2" fill="none" /></svg></button>
+              <button class="icon-btn" type="button" data-toy="treat" data-i18n-title="feed" title="Treats" aria-pressed="false"><svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="14" cy="17" rx="9" ry="6" fill="#C9803E" /><path d="M21 17l7-5v10z" fill="#C9803E" /></svg></button>
+              <button class="icon-btn" type="button" data-toy="laser" data-i18n-title="laser" title="Laser" aria-pressed="false"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#FF3B3B" opacity=".2" /><circle cx="16" cy="16" r="3" fill="#FF3B3B" /></svg></button>
+              <button class="icon-btn" type="button" data-toy="ball" data-i18n-title="ball" title="Ball" aria-pressed="false"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" fill="#D9435E" /><path d="M10 12c4 3 8 3 12 0M10 20c4-3 8-3 12 0" stroke="#FFE08A" stroke-width="2" fill="none" /></svg></button>
             </span>
           </div>
           <canvas class="stage__canvas" id="preview"></canvas>

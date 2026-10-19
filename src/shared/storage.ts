@@ -93,6 +93,19 @@ export async function patchProfile(id: string, patch: Partial<CatProfile>): Prom
   return next;
 }
 
+/** Pure helper: the list without `id`, but never empty (the last cat can only be turned off). */
+export function withoutProfile(list: CatProfile[], id: string): CatProfile[] {
+  if (list.length <= 1) return list;
+  return list.filter((p) => p.id !== id);
+}
+
+export async function removeProfile(id: string): Promise<CatProfile[]> {
+  const list = await loadProfiles();
+  const next = withoutProfile(list, id);
+  if (next.length !== list.length) await saveProfiles(next);
+  return next;
+}
+
 /** Writes factory defaults on first install without clobbering user data. */
 export async function ensureDefaults(): Promise<void> {
   const [profiles, settings] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS)]);
