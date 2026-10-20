@@ -19,6 +19,7 @@ import type { BowlKind, CatBedsState, CatProfile, CatRuntimeSnapshot, FeedingSta
 import { DEFAULT_BEDS, DEFAULT_STATION } from '../shared/storage';
 import { Rng } from '../shared/rng';
 import { BedsModel } from './CatBeds';
+import { filterPlatforms, type NoGoRect } from './ExclusionZone';
 import { staggerDelay } from '../ai/SocialCoordinator';
 import { displayName } from '../shared/i18n';
 import { mixHex } from '../shared/color';
@@ -178,6 +179,8 @@ export class World {
   private readonly rng = new Rng(Date.now() ^ 0x5eed);
   private lastRoam = new Map<string, number>();
   private leaving: { agent: CatAgent; side: 1 | -1 }[] = [];
+  /** The box around the text field being typed in (cats keep out), or null. */
+  exclusion: NoGoRect | null = null;
 
   constructor(opts: WorldOptions) {
     this.source = opts.source;
@@ -255,6 +258,7 @@ export class World {
       userIdle: this.userIdle,
       beds: this.beds.enabled ? this.beds : null,
       wander: this.wander,
+      noGo: this.exclusion,
     };
     this.envCache = env;
     return env;
@@ -263,7 +267,8 @@ export class World {
   update(dt: number): void {
     const h = clamp(dt, 0, 1 / 15);
     this.now += h;
-    this.platforms = allPlatforms(this.source);
+    // Ledges in (or reaching into) the typing zone are off-limits while it is active.
+    this.platforms = filterPlatforms(allPlatforms(this.source), this.exclusion, this.settings.catScale);
     this.cursor.update(this.now);
     this.station.scale = clamp(this.settings.catScale, 0.6, 1.6);
     this.beds.scale = this.station.scale;
@@ -290,9 +295,34 @@ export class World {
     if (this.held) this.held.holdMove(this.cursor.x, this.cursor.y, this.grabVel.x, this.grabVel.y);
     this.runPending();
     for (const a of this.agents) a.update(h, env);
+    this.evacuate(env);
     this.social.update(this.agents, env);
     this.particles.update(h);
     this.flushLeaving();
+  }
+
+  /* ---------------------------------------------------- typing zones */
+
+  /**
+   * The user focused (or is typing in) a text field: `zone` is its box expanded by
+   * the safety margins (see ExclusionZone), or null when nothing is focused.
+   */
+  setExclusion(zone: NoGoRect | null): void {
+    this.exclusion = zone;
+  }
+
+  /** Any cat inside the zone — or heading into it — politely moves out of the way. */
+  private evacuate(env: AgentEnv): void {
+    const z = this.exclusion;
+    if (!z) return;
+    for (const a of this.agents) {
+      if (a.isHeld() || a.isAirborne() || a.isClimbing() || a.parked) continue;
+      if (a.planLabel === 'evade' && a.plan.length) continue;
+      if (!a.inZone(z, env)) continue;
+      const s = this.social.sessionOf(a);
+      if (s) this.social.end(s);
+      a.evade(z, env);
+    }
   }
 
   /* ---------------------------------------------------- anti-mirroring */
@@ -780,6 +810,26 @@ export class World {
       this.staggered('toy', this.agents.filter((a) => !a.isAsleep() || a.drives.energy > 45), (a, e) => a.command('toy', e));
     }
     this.laserOn = on;
+  }
+
+  /** The feather wand in hand: its rod tip follows the pointer; awake cats come to hunt the feather. */
+  wandAt(x: number, y: number): void {
+    const fresh = !this.toys.wand;
+    this.toys.controlWand(x, y, true);
+    if (fresh) {
+      this.env();
+      this.staggered('toy', this.agents.filter((a) => !a.isAsleep() || a.drives.energy > 40), (a, e) => {
+        const s = this.social.sessionOf(a);
+        if (s && s.kind !== 'idle') this.social.end(s);
+        if (!this.social.sessionOf(a)) a.command('toy', e);
+      });
+    }
+  }
+
+  /** The feather wand is put away. */
+  wandOff(): void {
+    this.toys.controlWand(0, 0, false);
+    for (const a of this.agents) if (a.planLabel === 'toy' && !this.toys.count) a.clearPlan();
   }
 
   /** Picks up / carries the ball under the cursor. */

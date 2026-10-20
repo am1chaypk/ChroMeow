@@ -47,7 +47,8 @@ import { World } from '../sim/World';
 import { catchUpStation } from '../sim/FeedingStation';
 import { renderQuality } from '../engine/ArticulatedCatRenderer';
 import { displayName, useLanguage } from '../shared/i18n';
-import { InputInterceptor } from './InputInterceptor';
+import { InputInterceptor, deepActiveElement } from './InputInterceptor';
+import { TYPING_LINGER_MS, exclusionZone } from '../sim/ExclusionZone';
 import { PlayMode } from './PlayMode';
 import { GamesMenu, type GameAction } from './GamesMenu';
 import { ShadowDOMOverlay } from './ShadowDOMOverlay';
@@ -105,6 +106,9 @@ class ContentApp {
   private presenceTimer: ReturnType<typeof setInterval> | null = null;
   private exiting: ReturnType<typeof setTimeout> | null = null;
   private entering: ReturnType<typeof setTimeout> | null = null;
+  /* typing exclusion zone */
+  private field: HTMLElement | null = null;
+  private lastKey = -Infinity;
 
   constructor(settings: Settings, profiles: CatProfile[], station: FeedingStation, beds: CatBedsState) {
     this.settings = settings;
@@ -185,6 +189,11 @@ class ContentApp {
       cancel: () => world.pointerCancel(),
       activity: () => this.onActivity(),
       leave: () => world.pointerLeave(),
+      focusField: (el, typed) => {
+        if (el) this.field = el;
+        else if (performance.now() - this.lastKey > TYPING_LINGER_MS) this.field = null;
+        if (typed) this.lastKey = performance.now();
+      },
       typing: (el, caret) => {
         const id = scanner.track(el);
         const r = el.getBoundingClientRect();
@@ -509,6 +518,7 @@ class ContentApp {
     this.adaptQuality(Math.min(0.1, raw));
     this.updateIdle(now);
     this.scanner.update(now);
+    this.world.setExclusion(this.typingZone(now));
     this.world.update(dt);
     this.saveStation();
     // Sleepy throttle: when everyone is napping (or calm mode is on), draw at ~30 fps.
@@ -539,6 +549,27 @@ class ContentApp {
     );
     if (now - this.lastSnapshot > SNAPSHOT_INTERVAL) this.pushSnapshot();
   };
+
+  /**
+   * The no-go box around the text field you are in: while it has focus (and for
+   * a few seconds after the last keystroke), its live bounding box plus margins.
+   */
+  private typingZone(now: number): ReturnType<typeof exclusionZone> | null {
+    const el = this.field;
+    if (!el) return null;
+    if (!el.isConnected) {
+      this.field = null;
+      return null;
+    }
+    const focused = deepActiveElement() === el || el.contains(deepActiveElement());
+    if (!focused && now - this.lastKey > TYPING_LINGER_MS) {
+      this.field = null;
+      return null;
+    }
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0 || r.bottom < 0 || r.top > window.innerHeight) return null;
+    return exclusionZone(r);
+  }
 
   /**
    * Keeps animation smooth on slower machines: if frames run long for a few
@@ -577,13 +608,17 @@ class ContentApp {
   private playGame(action: GameAction): void {
     const w = this.world;
     if (!w) return;
-    if (action === 'treat' || action === 'laser' || action === 'ball') this.play?.set(action);
+    if (action === 'treat' || action === 'laser' || action === 'ball' || action === 'feather_wand') this.play?.set(action);
     else this.doAction(action);
   }
 
-  private doAction(action: 'treat' | 'laser' | 'ball' | 'call' | 'mouse' | 'clear'): boolean {
+  private doAction(action: 'treat' | 'laser' | 'ball' | 'feather_wand' | 'call' | 'mouse' | 'clear'): boolean {
     const w = this.world;
     if (!w) return false;
+    if (action === 'feather_wand') {
+      this.play?.set('feather_wand');
+      return true;
+    }
     if (action === 'treat') w.dropTreat();
     else if (action === 'laser') w.tossLaser();
     else if (action === 'ball') w.tossBall();

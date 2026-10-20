@@ -1,76 +1,19 @@
 /**
- * v3 #3 / #8 — the toy mouse with its dangling string, and toys you pick
- * straight up off the page (ball, mouse) plus "clear all".
+ * v3 #3 / #8 (v3.1) — the standalone toy mouse (no string attached), and toys
+ * you pick straight up off the page (ball, mouse) plus "clear all".
  */
 import { describe, expect, it } from 'vitest';
-import { MOUSE_ALERT, MOUSE_LIVES, ROPE_SEGMENTS, ROPE_SEG_LEN, StringRope, catchMouse, createMouse, holdMouse, stepMouse } from '../src/sim/MouseToy';
+import { MOUSE_ALERT, MOUSE_LIVES, catchMouse, createMouse, holdMouse, stepMouse } from '../src/sim/MouseToy';
 import { ToyManager } from '../src/content/ToyManager';
 import { World } from '../src/sim/World';
 import { StaticPlatformSource } from '../src/sim/StaticPlatformSource';
 import { DEFAULT_SETTINGS } from '../src/shared/storage';
 import { createAlex, createAnna } from '../src/shared/presets';
-import { makeFloor, type Platform } from '../src/engine/Physics';
+import { makeFloor } from '../src/engine/Physics';
 import { Rng } from '../src/shared/rng';
 
 const B = { width: 1200, height: 700 };
 const floor = makeFloor(B);
-const ledge: Platform = { id: 'shelf', kind: 'dom', xMin: 400, xMax: 700, y: 400, warm: 0, narrow: false, tag: 'div', elementRef: null };
-const MAX_LEN = (ROPE_SEGMENTS - 1) * ROPE_SEG_LEN;
-
-describe('the dangling string (Verlet rope)', () => {
-  it('hangs straight down below a held anchor, never stretched', () => {
-    const r = new StringRope(300, 200);
-    for (let i = 0; i < 400; i++) r.step(1 / 60, 300, 200, [floor], B);
-    expect(r.length()).toBeLessThanOrEqual(MAX_LEN * 1.02);
-    expect(r.tip().y).toBeGreaterThan(200 + MAX_LEN * 0.95);
-    expect(Math.abs(r.tip().x - 300)).toBeLessThan(1);
-    expect(r.hangDepth()).toBeGreaterThan(MAX_LEN * 0.9);
-  });
-
-  it('lies on the floor and drags along behind a moving anchor', () => {
-    const r = new StringRope(600, floor.y - 2, ROPE_SEGMENTS, ROPE_SEG_LEN, 0);
-    let x = 600;
-    for (let i = 0; i < 240; i++) {
-      x -= 2;
-      r.step(1 / 60, x, floor.y - 2, [floor], B);
-    }
-    // Every node rests on (not in) the floor, trailing behind the anchor in a line.
-    for (const n of r.nodes) expect(n.y).toBeLessThanOrEqual(floor.y);
-    expect(r.nodes.filter((n) => n.grounded).length).toBeGreaterThanOrEqual(ROPE_SEGMENTS - 3);
-    expect(r.tip().x).toBeGreaterThan(x + MAX_LEN * 0.8);
-    expect(r.length()).toBeLessThanOrEqual(MAX_LEN * 1.02);
-  });
-
-  it('rests on DOM ledges and dangles off their edge', () => {
-    const r = new StringRope(690, ledge.y - 2);
-    for (let i = 0; i < 600; i++) r.step(1 / 60, 692, ledge.y - 2, [ledge, floor], B);
-    // Anchored at the very edge: the string falls over it.
-    expect(r.tip().y).toBeGreaterThan(ledge.y + 20);
-    // Laid across the ledge instead, it rests on top of it.
-    const flat = new StringRope(600, ledge.y - 2, ROPE_SEGMENTS, ROPE_SEG_LEN, 0);
-    let x = 600;
-    for (let i = 0; i < 300; i++) {
-      x = Math.max(450, x - 1.5);
-      flat.step(1 / 60, x, ledge.y - 2, [ledge, floor], B);
-    }
-    for (const n of flat.nodes) expect(n.y).toBeLessThanOrEqual(ledge.y);
-    expect(flat.nodes.filter((n) => n.grounded).length).toBeGreaterThan(ROPE_SEGMENTS - 3);
-  });
-
-  it('swings when batted', () => {
-    const r = new StringRope(300, 200);
-    for (let i = 0; i < 300; i++) r.step(1 / 60, 300, 200, [floor], B);
-    r.bat(ROPE_SEGMENTS - 1, 300, -100);
-    r.step(1 / 60, 300, 200, [floor], B);
-    expect(r.speed(1 / 60)).toBeGreaterThan(20);
-    let maxX = 0;
-    for (let i = 0; i < 30; i++) {
-      r.step(1 / 60, 300, 200, [floor], B);
-      maxX = Math.max(maxX, r.tip().x - 300);
-    }
-    expect(maxX).toBeGreaterThan(8);
-  });
-});
 
 describe('the toy mouse', () => {
   const rng = new Rng(3);
@@ -136,10 +79,12 @@ describe('the toy mouse', () => {
     expect(m.x).toBe(x);
   });
 
-  it('dangles its string when lifted', () => {
+  it('wriggles in the hand when lifted', () => {
     const m = createMouse(600, floor.y, 1);
-    for (let i = 0; i < 240; i++) holdMouse(m, 600, 300, 1 / 60, [floor], B);
-    expect(m.rope.hangDepth()).toBeGreaterThan(MAX_LEN * 0.8);
+    for (let i = 0; i < 60; i++) holdMouse(m, 600, 300, 1 / 60);
+    expect(m.ground).toBeNull();
+    expect(m.x).toBe(600);
+    expect(m.anim).toBeGreaterThan(0);
   });
 
   it('the toy manager keeps one mouse, which a hand can pick up and throw', () => {

@@ -84,7 +84,7 @@ export function solveJump(x0: number, y0: number, x1: number, y1: number, cleara
 }
 
 /** How high a cat's feet can get when it leaps straight up at something (px, at scale 1). */
-export const MAX_LEAP_UP = 190;
+export const MAX_LEAP_UP = 196;
 /** How far it drifts sideways in such a leap (px, at scale 1). */
 export const MAX_LEAP_DX = 150;
 /** How far above its feet a cat's front paws reach at full stretch (px, at scale 1). */

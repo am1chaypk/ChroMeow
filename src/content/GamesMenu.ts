@@ -10,8 +10,9 @@
  */
 import { clamp } from '../shared/math';
 import { lang, t, tf } from '../shared/i18n';
+import { WAND_ICON } from './PlayMode';
 
-export type GameAction = 'treat' | 'laser' | 'ball' | 'mouse' | 'call' | 'clear';
+export type GameAction = 'treat' | 'laser' | 'ball' | 'feather_wand' | 'mouse' | 'call' | 'clear';
 
 export interface GameItem {
   action: GameAction;
@@ -26,7 +27,7 @@ const ICON = {
   treat: '<svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="14" cy="17" rx="9" ry="6" fill="#C9803E"/><path d="M21 17l7-5v10z" fill="#C9803E"/><circle cx="10.5" cy="15.5" r="1.3" fill="#5B3A1E"/></svg>',
   laser: '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="10" fill="#FF3B3B" opacity=".18"/><circle cx="16" cy="16" r="5" fill="#FF3B3B" opacity=".45"/><circle cx="16" cy="16" r="2.2" fill="#FFF2F2"/></svg>',
   ball: '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="17" r="9" fill="#D9435E"/><path d="M10 13c4 3 8 3 12 0M10 21c4-3 8-3 12 0" stroke="#FFE08A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
-  mouse: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 22c3 5 10 5 13 1" stroke="#CDB98F" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="7.5" cy="22" r="2.4" fill="#D9435E"/><path d="M27 18c-1-6-11-7-14-2-1 2 0 3 2 3h10c1.4 0 2.2-.4 2-1z" fill="#8F8B88"/><circle cx="19.5" cy="12.5" r="3" fill="#8E8A87"/><circle cx="19.6" cy="12.5" r="1.8" fill="#F1B6B9"/><circle cx="23" cy="15.2" r=".9" fill="#1E1A18"/><circle cx="27" cy="17.6" r="1" fill="#E58B98"/></svg>',
+  mouse: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M13 18c-4 0-7 2-9 1" stroke="#C79A9A" stroke-width="1.2" fill="none" stroke-linecap="round"/><path d="M27 18c-1-6-11-7-14-2-1 2 0 3 2 3h10c1.4 0 2.2-.4 2-1z" fill="#8F8B88"/><circle cx="19.5" cy="12.5" r="3" fill="#8E8A87"/><circle cx="19.6" cy="12.5" r="1.8" fill="#F1B6B9"/><circle cx="23" cy="15.2" r=".9" fill="#1E1A18"/><circle cx="27" cy="17.6" r="1" fill="#E58B98"/></svg>',
   call: '<svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="21" rx="6.5" ry="5.2" fill="#E58B88"/><circle cx="9" cy="13.5" r="2.6" fill="#E58B88"/><circle cx="13.5" cy="9.5" r="2.6" fill="#E58B88"/><circle cx="18.5" cy="9.5" r="2.6" fill="#E58B88"/><circle cx="23" cy="13.5" r="2.6" fill="#E58B88"/></svg>',
   clear: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 25l12-12 3 3-12 12H9z" fill="#B9A288"/><path d="M21 13l3-6 3 3-6 3z" fill="#7A6A58"/><path d="M6 27h20" stroke="#7A6A58" stroke-width="1.6" stroke-linecap="round"/><circle cx="24" cy="23" r="1.4" fill="#C9803E"/><circle cx="20" cy="26" r="1.1" fill="#D9435E"/></svg>',
 };
@@ -36,6 +37,7 @@ export const GAME_ITEMS: readonly GameItem[] = [
   { action: 'treat', label: 'toolTreat', hint: 'playTreat', icon: ICON.treat },
   { action: 'laser', label: 'toolLaser', hint: 'playLaser', icon: ICON.laser },
   { action: 'ball', label: 'toolBall', hint: 'playBallDirect', icon: ICON.ball },
+  { action: 'feather_wand', label: 'toolWand', hint: 'playWand', icon: WAND_ICON },
   { action: 'mouse', label: 'toolMouse', hint: 'playMouse', icon: ICON.mouse },
   { action: 'call', label: 'call', hint: 'callHint', icon: ICON.call },
   { action: 'clear', label: 'clearAll', hint: 'clearHint', icon: ICON.clear },

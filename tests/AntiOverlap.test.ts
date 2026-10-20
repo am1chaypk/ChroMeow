@@ -173,7 +173,7 @@ describe('vertical pounces', () => {
     expect(fwd.plan!.vx).toBeLessThanOrEqual(0);
   });
 
-  it('a cat jumps up at a string dangling above it, facing it first, and swats it', () => {
+  it('a cat jumps up at the feather wand dangling above it, facing it first, and swats it', () => {
     const w = world();
     w.setProfiles([createAlex()]);
     const a = w.agents[0];
@@ -182,21 +182,19 @@ describe('vertical pounces', () => {
     a.flip = 1;
     a.drives.energy = 95;
     a.drives.playfulness = 95;
-    const toy = w.releaseMouse(440);
-    for (let i = 0; i < 40; i++) w.update(DT);
-    // The hand lifts the mouse behind the cat: the string dangles at paw height.
-    w.pointerMove(440, 470, 1);
-    w.grabToy(toy, 440, 470, 1);
+    for (let i = 0; i < 10; i++) w.update(DT);
+    // The wand behind the cat: the feather dangles at paw height.
+    w.wandAt(440, 380);
     const swats: number[] = [];
-    const bat = w.toys.batString.bind(w.toys);
-    w.toys.batString = (...args: Parameters<typeof bat>) => {
+    const swat = w.toys.swatWand.bind(w.toys);
+    w.toys.swatWand = (...args: Parameters<typeof swat>) => {
       swats.push(a.facing);
-      return bat(...args);
+      return swat(...args);
     };
     let minY = Infinity;
     let backward = 0;
     for (let t = 0; t < 10; t += DT) {
-      w.pointerMove(440, 470, 1 + t);
+      w.wandAt(440 + Math.sin(t * 2) * 8, 380);
       w.update(DT);
       a.refreshLandmarks();
       minY = Math.min(minY, a.y);

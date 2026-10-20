@@ -282,12 +282,12 @@ export interface WorldSnapshot {
   href: string;
 }
 
-export type ToyKind = 'treat' | 'laser' | 'ball' | 'mouse';
+export type ToyKind = 'treat' | 'laser' | 'ball' | 'mouse' | 'feather_wand';
 
 /** Toys that go into your hand in play mode (the mouse runs about on its own). */
-export type ToolKind = 'treat' | 'laser' | 'ball';
+export type ToolKind = 'treat' | 'laser' | 'ball' | 'feather_wand';
 
-export type PopupAction = 'treat' | 'laser' | 'ball' | 'call' | 'mouse' | 'clear';
+export type PopupAction = 'treat' | 'laser' | 'ball' | 'feather_wand' | 'call' | 'mouse' | 'clear';
 
 export interface PageInfo {
   hostname: string;

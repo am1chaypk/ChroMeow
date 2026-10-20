@@ -42,6 +42,9 @@ import type { ParticleSystem } from '../engine/Particles';
 import type { AnyCtx } from '../engine/canvas';
 import type { Toy, ToyManager } from '../content/ToyManager';
 import type { StationModel } from './FeedingStation';
+import { mouseBody } from './MouseToy';
+import { blockedSpan, clampWalk, pointInZone, rectsIntersect, safeFloorX, type NoGoRect } from './ExclusionZone';
+import { wandTip } from './FeatherWand';
 import { BED_LIFT, type BedsModel } from './CatBeds';
 
 export type Gait = 'SAUNTER_WALK' | 'TROT' | 'ZOOMIES_SPRINT' | 'STALK_CURSOR' | 'PLAY_TAG_CHASE' | 'JEALOUSY_INTERVENTION' | 'SEEKING_FOOD' | 'SEEKING_WATER';
@@ -113,6 +116,8 @@ export interface AgentEnv {
   beds?: BedsModel | null;
   /** Visiting other tabs (null when there are none / roaming is off). */
   wander?: WanderHooks | null;
+  /** The box around the text field you are typing in (cats keep out), or null. */
+  noGo?: NoGoRect | null;
 }
 
 /** Lets a cat walk off the screen to visit another of the user's tabs. */
@@ -333,7 +338,8 @@ export class CatAgent {
 
   currentPlatform(env: AgentEnv): Platform | null {
     if (!this.groundId) return null;
-    return env.platforms.find((p) => p.id === this.groundId) ?? (this.groundId === 'floor' ? env.source.floor() : null);
+    // (A ledge taken out of play by a typing zone is still the one the cat stands on.)
+    return env.platforms.find((p) => p.id === this.groundId) ?? (this.groundId === 'floor' ? env.source.floor() : env.source.get(this.groundId) ?? null);
   }
 
   /* --------------------------------------------------------------- plans */
@@ -796,7 +802,13 @@ export class CatAgent {
         }
         const width = t.xMax - t.xMin;
         const usable = width > this.bodyLen() * 0.9;
-        const spot: Spot = usable ? { platformId: t.platformId, x: clamp(t.caret.x + 46 * S, t.xMin + 30 * S, t.xMax - 30 * S) } : { platformId: 'floor', x: t.caret.x };
+        let spot: Spot = usable ? { platformId: t.platformId, x: clamp(t.caret.x + 46 * S, t.xMin + 30 * S, t.xMax - 30 * S) } : { platformId: 'floor', x: t.caret.x };
+        // While you type, the field is off-limits: watch from a polite distance on the floor instead.
+        const z = env.noGo;
+        if (z) {
+          const floor = env.source.floor();
+          spot = { platformId: 'floor', x: blockedSpan(floor, z, S) ? safeFloorX(this.x, z, env.bounds.width, this.bodyLen() * 0.8) : clamp(t.caret.x, 30 * S, env.bounds.width - 30 * S) };
+        }
         this.setPlan(
           [
             { kind: 'goto', spot, gait: 'TROT', maxTime: 14 },
@@ -811,12 +823,13 @@ export class CatAgent {
         return;
       }
       case 'toy': {
-        const toy = env.toys.nearest(this.x, this.y, ['ball', 'laser', 'mouse']);
+        // A feather wand in your hand beats every other toy.
+        const toy = env.toys.wand ?? env.toys.nearest(this.x, this.y, ['ball', 'laser', 'mouse']);
         if (!toy) {
           this.makePlan('explore', env);
           return;
         }
-        const span = toy.kind === 'mouse' ? r.range(14, 22) : toy.kind === 'laser' ? r.range(9, 15) : r.range(7, 11);
+        const span = toy.kind === 'feather_wand' ? r.range(18, 28) : toy.kind === 'mouse' ? r.range(14, 22) : toy.kind === 'laser' ? r.range(9, 15) : r.range(7, 11);
         this.chaseDone = false;
         this.setPlan([{ kind: 'chase', toy, until: env.now + span }, { kind: 'state', state: 'IDLE_SIT', dur: r.range(1.5, 3) }], 'toy');
         return;
@@ -935,8 +948,11 @@ export class CatAgent {
   }
 
   private walkTo(rawTargetX: number, gait: Gait, env: AgentEnv, tol: number, offscreen = false): boolean {
-    // Keep clear of where the other cats are sitting or already heading (personal space).
-    const targetX = offscreen ? rawTargetX : this.roomAt(rawTargetX, env);
+    // Keep clear of where the other cats are sitting or already heading (personal space),
+    // and of the text field you are typing in (never stopping in or crossing its strip).
+    let targetX = offscreen ? rawTargetX : this.roomAt(rawTargetX, env);
+    const here = env.noGo && !offscreen ? this.currentPlatform(env) : null;
+    if (here) targetX = clampWalk(this.x, targetX, here, env.noGo ?? null, this.S, this.bodyLen() * 0.8);
     if (this.groundId && (!this.dest || this.dest.platformId !== this.groundId || Math.abs(this.dest.x - targetX) > 24 * this.S)) this.dest = { platformId: this.groundId, x: targetX, at: env.now };
     else if (this.dest) this.dest.x = targetX;
     const dx = targetX - this.x;
@@ -1012,7 +1028,10 @@ export class CatAgent {
         const hopNow = this.route?.hops[this.hop];
         const stale = !this.route || this.routeKey !== key || (hopNow ? hopNow.from !== this.groundId : this.groundId !== spot.platformId);
         if (stale) {
-          this.route = planRoute(env.platforms, this.groundId, this.x, spot.platformId, spot.x, env.bounds);
+          // (The ledge it stands on may be off-limits right now — it can still leave it.)
+          const here = this.currentPlatform(env);
+          const graph = here && !env.platforms.some((p) => p.id === here.id) ? [...env.platforms, here] : env.platforms;
+          this.route = planRoute(graph, this.groundId, this.x, spot.platformId, spot.x, env.bounds);
           this.hop = 0;
           this.routeKey = key;
           if (!this.route) {
@@ -1266,16 +1285,10 @@ export class CatAgent {
 
   /* ---------------------------------------------------------- toy hunting */
 
-  /** What the cat is going for: the mouse itself on the ground, its string when it dangles, the ball, the laser dot. */
+  /** What the cat is going for: the mouse's body, the feather at the end of the wand's string, the ball, the laser dot. */
   private chaseAim(toy: Toy): Vec2 {
-    const m = toy.mouse;
-    if (m) {
-      if (toy.held || !m.ground || m.rope.hangDepth() > 14 * this.S) {
-        const free = m.rope.lowestFree();
-        if (free) return free;
-      }
-      return { x: m.x, y: m.y - 4 };
-    }
+    if (toy.mouse) return mouseBody(toy.mouse);
+    if (toy.wand) return wandTip(toy.wand);
     return { x: toy.x, y: toy.y };
   }
 
@@ -1290,7 +1303,17 @@ export class CatAgent {
         this.chaseDone = true;
         this.drives.playfulness = Math.max(0, this.drives.playfulness - 12);
         if (this.lm) env.particles.emit('heart', this.lm.head.x, this.lm.head.y - 12 * S, 1, S);
-      } else if (!env.toys.batString(toy, paw.x, paw.y, this.facing) && !toy.held) env.toys.swat(toy, this.facing, 0.8);
+      } else if (!toy.held) env.toys.swat(toy, this.facing, 0.8);
+    } else if (toy.wand) {
+      // Got it! The feather jerks away from the paw and a few wisps of fluff come loose.
+      if (env.toys.swatWand(toy, paw, this.facing)) {
+        const tip = wandTip(toy.wand);
+        env.particles.emit('fluff', tip.x, tip.y, 2 + (this.rng.chance(0.5) ? 1 : 0), S);
+        this.drives.playfulness = Math.max(0, this.drives.playfulness - 5);
+        this.drives.affection = Math.min(100, this.drives.affection + 2);
+        this.drives.irritation = Math.max(0, this.drives.irritation - 4);
+      }
+      return;
     } else env.toys.swat(toy, this.facing, 1);
     env.particles.emit('spark', paw.x, paw.y, 5, S);
   }
@@ -1312,7 +1335,8 @@ export class CatAgent {
     const dx = aim.x - this.x;
     const reach = (MAX_LEAP_UP + LEAP_REACH) * S;
     const overHere = aim.x > here.xMin - 10 && aim.x < here.xMax + 10;
-    const inAir = rise > 46 * S;
+    // The feather counts as "in the air" from 40 px above the cat's surface (dragging below 25 px).
+    const inAir = rise > (toy.wand ? 40 : 46) * S;
     const target = () => (env.toys.toys.includes(toy) ? this.chaseAim(toy) : null);
     const swat = (paw: Vec2) => this.swatToy(toy, paw, env);
     // 1. Up in the air above this ledge and within reach: a vertical pounce (facing it first).
@@ -1355,19 +1379,27 @@ export class CatAgent {
       return;
     }
     // 3. Same level: stalk a mouse low and slow, run for the rest, then pounce.
-    if (Math.abs(dx) > (toy.kind === 'mouse' ? 160 : 130) * S) {
+    //    A feather dragged along the floor is stalked low (dilated pupils) and pinned after a long butt wiggle.
+    const feather = !!toy.wand;
+    if (Math.abs(dx) > (toy.kind === 'mouse' ? 160 : feather ? 140 : 130) * S) {
       // A running mouse gets chased flat out; a still one is crept up on, low and slow, from just outside its notice.
       const mm = toy.mouse?.mode;
       const gait: Gait =
-        toy.kind === 'laser' || mm === 'flee' || mm === 'dart' ? 'ZOOMIES_SPRINT' : toy.kind === 'mouse' && mm !== 'scuttle' && Math.abs(dx) < 175 * S ? 'STALK_CURSOR' : 'TROT';
+        toy.kind === 'laser' || mm === 'flee' || mm === 'dart'
+          ? 'ZOOMIES_SPRINT'
+          : (toy.kind === 'mouse' && mm !== 'scuttle') || feather
+            ? Math.abs(dx) < (feather ? 260 : 175) * S
+              ? 'STALK_CURSOR'
+              : 'TROT'
+            : 'TROT';
       this.walkTo(aim.x - Math.sign(dx) * 52 * S, gait, env, 10 * S);
       return;
     }
     this.plan.unshift({
       kind: 'pounce',
       target,
-      range: toy.kind === 'mouse' ? 150 : 120,
-      wiggle: this.rng.range(0.3, 0.55),
+      range: toy.kind === 'mouse' ? 150 : feather ? 140 : 120,
+      wiggle: feather ? this.rng.range(0.6, 1.1) : this.rng.range(0.3, 0.55),
       onPin: () => {
         const paw = this.lm ? this.lm.paws[0] : { x: this.x + this.facing * 30 * S, y: this.y - 4 };
         swat({ x: paw.x, y: paw.y });
@@ -1496,6 +1528,46 @@ export class CatAgent {
       if (Math.abs(x - g.cx) < half) x = g.cx + (x < g.cx ? -half : half);
     }
     return clamp(x, this.bodyLen() * 0.6, env.bounds.width - this.bodyLen() * 0.6);
+  }
+
+  /* ------------------------------------------------------ typing zones */
+
+  /** Is any part of this cat (or the spot it is heading to) inside the no-go box? */
+  inZone(z: NoGoRect, env: AgentEnv): boolean {
+    const b = this.lm?.bounds;
+    if (b ? rectsIntersect(b, z) : pointInZone(this.x, this.y - 20 * this.S, z)) return true;
+    const d = this.dest;
+    if (!d) return false;
+    const p = d.platformId === this.groundId ? this.currentPlatform(env) : env.platforms.find((q) => q.id === d.platformId) ?? null;
+    return !!p && pointInZone(d.x, p.y - 20 * this.S, z);
+  }
+
+  /**
+   * You started typing next to (or under) this cat: it gets up — even from a
+   * nap — and walks to a spot on the floor at least 140 px from the field, then
+   * sits and watches from there.
+   */
+  evade(z: NoGoRect, env: AgentEnv): void {
+    if (this.held || this.isAirborne() || this.climb) return;
+    const floor = env.source.floor();
+    const S = this.S;
+    const L = this.bodyLen();
+    const floorBlocked = !!blockedSpan(floor, z, S);
+    const x = floorBlocked || (this.x >= z.minX && this.x <= z.maxX && this.groundId !== 'floor') ? safeFloorX(this.x, z, env.bounds.width, L * 0.8) : clamp(this.x, L * 0.6, env.bounds.width - L * 0.6);
+    if (this.isAsleep()) {
+      // A gentle wake: a slow blink and up.
+      this.slowBlink();
+      this.fsm.restore('IDLE_STAND');
+    }
+    const face = (): 1 | -1 => ((z.minX + z.maxX) / 2 >= this.x ? 1 : -1);
+    this.setPlan(
+      [
+        { kind: 'goto', spot: { platformId: 'floor', x }, gait: 'TROT', tol: 10 * S, maxTime: 20 },
+        { kind: 'state', state: this.rng.chance(0.6) ? 'IDLE_SIT' : 'CAT_LOAF', dur: this.rng.range(6, 12), face },
+      ],
+      'evade',
+      true,
+    );
   }
 
   /* ------------------------------------------------------ coming & going */

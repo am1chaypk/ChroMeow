@@ -11,6 +11,7 @@ import type { ToyKind } from '../shared/types';
 import type { AnyCtx } from '../engine/canvas';
 import { GRAVITY, findLanding, type Platform, type WorldBounds } from '../engine/Physics';
 import { catchMouse, createMouse, drawMouse, holdMouse, stepMouse, type MouseBody, type Threat } from '../sim/MouseToy';
+import { createWand, drawWand, swatWand, updateWand, wandBounds, wandTip, type FeatherWand } from '../sim/FeatherWand';
 
 export interface Toy {
   id: number;
@@ -35,8 +36,10 @@ export interface Toy {
   controlled?: boolean;
   /** Ball / mouse currently held under the cursor (not yet thrown). */
   held?: boolean;
-  /** The toy mouse's body, behaviour and string. */
+  /** The toy mouse's body and behaviour. */
   mouse?: MouseBody;
+  /** The feather wand's rod, string and lure (x, y of the toy = the feather). */
+  wand?: FeatherWand;
 }
 
 /** Toys a hand can pick straight up off the page and throw. */
@@ -133,14 +136,35 @@ export class ToyManager {
     if (toy.mouse.catches >= 3) toy.life = Math.min(toy.life, toy.age + 40);
   }
 
-  /** A paw swat at the mouse's string near (x, y): it swings and the mouse startles. */
-  batString(toy: Toy, x: number, y: number, dirX: number): boolean {
-    const m = toy.mouse;
-    if (!m) return false;
-    const i = m.rope.nearest(x, y, 26);
-    if (i < 0) return false;
-    m.rope.bat(i, dirX * lerp(160, 320, this.rng.next()), -lerp(120, 260, this.rng.next()));
-    return true;
+  /**
+   * The feather wand in the user's hand: `on` while the tool is picked, the rod
+   * tip following the cursor; off removes it.
+   */
+  controlWand(x: number, y: number, on: boolean): Toy | null {
+    let t = this.toys.find((k) => k.kind === 'feather_wand') ?? null;
+    if (!on) {
+      if (t) this.remove(t);
+      return null;
+    }
+    if (!t) {
+      t = this.make('feather_wand', x, y);
+      t.wand = createWand(x, y);
+      t.life = Infinity;
+    }
+    t.tx = x;
+    t.ty = y;
+    return t;
+  }
+
+  /** The feather wand, if one is in hand. */
+  get wand(): Toy | null {
+    return this.toys.find((k) => k.kind === 'feather_wand') ?? null;
+  }
+
+  /** A cat's paw meets the feather: it jerks and swings away from the swat. */
+  swatWand(toy: Toy, paw: { x: number; y: number }, dirX: number): boolean {
+    if (!toy.wand) return false;
+    return swatWand(toy.wand, paw, dirX * lerp(260, 460, this.rng.next()), -lerp(180, 360, this.rng.next()));
   }
 
   /** Removes every temporary object (treats, balls, the laser dot, the mouse and its leftovers). */
@@ -245,7 +269,7 @@ export class ToyManager {
     this.toys = this.toys.filter((t) => t !== toy);
   }
 
-  nearest(x: number, y: number, kinds: readonly ToyKind[] = ['treat', 'ball', 'laser', 'mouse']): Toy | null {
+  nearest(x: number, y: number, kinds: readonly ToyKind[] = ['treat', 'ball', 'laser', 'mouse', 'feather_wand']): Toy | null {
     let best: Toy | null = null;
     let bd = Infinity;
     for (const t of this.toys) {
@@ -302,7 +326,12 @@ export class ToyManager {
       if (t.held) t.age = 0;
       if (t.age > t.life) continue;
       if (t.kind === 'laser') this.updateLaser(t, dt, platforms, bounds);
-      else if (t.mouse) this.updateMouse(t, dt, platforms, bounds, cats);
+      else if (t.wand) {
+        updateWand(t.wand, dt, t.tx, t.ty, platforms, bounds);
+        const tip = wandTip(t.wand);
+        t.x = tip.x;
+        t.y = tip.y;
+      } else if (t.mouse) this.updateMouse(t, dt, platforms, bounds, cats);
       else if (!t.held) this.updateBody(t, dt, platforms, bounds);
       keep.push(t);
     }
@@ -311,7 +340,7 @@ export class ToyManager {
 
   private updateMouse(t: Toy, dt: number, platforms: readonly Platform[], bounds: WorldBounds, cats: readonly Threat[]): void {
     const m = t.mouse as MouseBody;
-    if (t.held) holdMouse(m, t.x, t.y - 5, dt, platforms, bounds);
+    if (t.held) holdMouse(m, t.x, t.y - 5, dt);
     else {
       stepMouse(m, dt, platforms, bounds, cats, this.rng);
       t.x = m.x;
@@ -420,14 +449,19 @@ export class ToyManager {
     for (const t of this.toys) {
       const fade = Math.min(1, (t.life - t.age) / 1.2);
       ctx.globalAlpha = Math.max(0, fade);
+      if (t.wand) {
+        drawWand(ctx, t.wand);
+        const r = wandBounds(t.wand);
+        minX = Math.min(minX, r.minX);
+        minY = Math.min(minY, r.minY);
+        maxX = Math.max(maxX, r.maxX);
+        maxY = Math.max(maxY, r.maxY);
+        continue;
+      }
       if (t.mouse) {
         drawMouse(ctx, t.mouse, !!t.held);
-        for (const n of t.mouse.rope.nodes) {
-          minX = Math.min(minX, n.x - 6);
-          minY = Math.min(minY, n.y - 6);
-          maxX = Math.max(maxX, n.x + 6);
-          maxY = Math.max(maxY, n.y + 6);
-        }
+        minX = Math.min(minX, t.x - 28);
+        maxX = Math.max(maxX, t.x + 28);
       } else if (t.kind === 'treat') {
         const s = 1 - t.eaten * 0.85;
         ctx.save();

@@ -6,12 +6,14 @@
  *  • Laser: the dot shines while the button is held and follows the pointer.
  *  • Ball:  press to pick it up, drag, and let go to throw — the throw speed is
  *           the hand's speed over the last few dozen milliseconds.
+ *  • Feather wand (v3.1): the rod follows the pointer the whole time it is in
+ *           hand (no button needed); the string and feather dangle from its tip.
  */
 import type { ToolKind } from '../shared/types';
 import type { World } from './World';
 
 export type { ToolKind };
-export const TOOL_KINDS: readonly ToolKind[] = ['treat', 'laser', 'ball'];
+export const TOOL_KINDS: readonly ToolKind[] = ['treat', 'laser', 'ball', 'feather_wand'];
 
 export interface MotionSample {
   x: number;
@@ -52,7 +54,13 @@ export class ToyTool {
 
   select(kind: ToolKind | null): void {
     if (this.pressed) this.cancel();
+    if (this.kind === 'feather_wand' && kind !== 'feather_wand') this.world()?.wandOff();
     this.kind = kind;
+  }
+
+  /** Pointer moved over the page (button up or down): the feather wand follows it. */
+  hover(x: number, y: number): void {
+    if (this.kind === 'feather_wand') this.world()?.wandAt(x, y);
   }
 
   down(x: number, y: number, t: number): void {
@@ -62,6 +70,7 @@ export class ToyTool {
     this.samples = [{ x, y, t }];
     if (this.kind === 'treat') w.placeTreat(x, y);
     else if (this.kind === 'laser') w.laserAt(x, y, true);
+    else if (this.kind === 'feather_wand') w.wandAt(x, y);
     else w.holdBall(x, y);
   }
 
@@ -73,6 +82,7 @@ export class ToyTool {
     while (this.samples.length > 2 && t - this.samples[0].t > 0.25) this.samples.shift();
     if (this.kind === 'laser') w.laserAt(x, y, true);
     else if (this.kind === 'ball') w.holdBall(x, y);
+    else if (this.kind === 'feather_wand') w.wandAt(x, y);
   }
 
   up(x: number, y: number, t: number): void {

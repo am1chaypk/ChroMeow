@@ -178,7 +178,9 @@ export function scoreIntents(c: BrainContext): Record<IntentKind, number> {
   s.keyboard = c.typing.active ? 0.55 + 0.6 * curious + 0.15 * (1 - smoothstep(200, 900, c.typing.dist)) : 0;
   s.social = c.partner.exists && c.partner.available ? 1.05 * social * p.sociability * (0.75 + 0.5 * initiative) + 0.15 * (c.partner.asleep ? tired : play) + (c.partner.dist < 160 ? 0.1 : 0) - 0.15 : 0;
   // A scurrying toy mouse on a string is the most irresistible toy of all.
-  s.toy = c.toy.kind === 'ball' || c.toy.kind === 'laser' || c.toy.kind === 'mouse' ? 0.9 + 0.7 * p.huntDrive + 0.5 * play - 0.6 * tired + (c.toy.kind === 'mouse' ? 0.35 : 0) : 0;
+  // A feather wand dancing in front of them is the highest-priority prey there is.
+  const toyBonus = c.toy.kind === 'feather_wand' ? 0.7 : c.toy.kind === 'mouse' ? 0.35 : 0;
+  s.toy = c.toy.kind && c.toy.kind !== 'treat' ? 0.9 + 0.7 * p.huntDrive + 0.5 * play - 0.6 * tired + toyBonus : 0;
   s.treat = c.toy.kind === 'treat' ? 2.2 : 0;
   s.climb = c.timeSinceClimb > 120 ? 0.32 * curious * (1 - p.laziness) * energy + 0.05 : 0;
   s.peek = c.timeSinceClimb > 60 ? 0.22 * curious * (1 - p.laziness * 0.6) : 0;

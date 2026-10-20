@@ -1,10 +1,11 @@
 /**
  * The toy mouse (v3): a little grey felt mouse that runs about on its own like a
  * real one — scuttling in short bursts, pausing to "sniff", darting off, bolting
- * away when a cat creeps close — until a cat pins it. A twine string with a pom
- * at the end hangs from it: a multi-segment Verlet rope that drags along the
- * floor and the page's ledges, swings when the mouse is lifted or dangles over
- * an edge, and is exactly the thing cats can't resist batting at.
+ * away when a cat creeps close — until a cat pins it.
+ *
+ * v3.1: a standalone critter — no string attached. Just its body, ears,
+ * twitching whiskers and its own thin rodent tail. (The string lives on the
+ * feather wand now.)
  *
  * DOM-free and deterministic for a given RNG, so the headless tests and Cat
  * Studio use it too.
@@ -12,187 +13,7 @@
 import { clamp, type Vec2 } from '../shared/math';
 import type { Rng } from '../shared/rng';
 import type { AnyCtx } from '../engine/canvas';
-import { GRAVITY, platformBelow, type Platform, type WorldBounds } from '../engine/Physics';
-
-/* ------------------------------------------------------------------ rope */
-
-export interface RopeNode {
-  x: number;
-  y: number;
-  px: number;
-  py: number;
-  /** Resting on a ledge / the floor this step. */
-  grounded: boolean;
-}
-
-export const ROPE_SEGMENTS = 9;
-export const ROPE_SEG_LEN = 7;
-const ROPE_RADIUS = 1.5;
-
-/**
- * A Verlet rope pinned at one end (node 0). Gravity, damping, distance
- * constraints, one-way collisions with ledges (it rests on top of them, slides
- * with friction and falls off their edges) and the viewport floor.
- */
-export class StringRope {
-  readonly nodes: RopeNode[] = [];
-  segLen: number;
-
-  /** Laid out from (x, y) in direction `angle` (default: hanging straight down). */
-  constructor(x: number, y: number, count = ROPE_SEGMENTS, segLen = ROPE_SEG_LEN, angle = Math.PI / 2) {
-    this.segLen = segLen;
-    for (let i = 0; i < count; i++) {
-      const nx = x + Math.cos(angle) * i * segLen;
-      const ny = y + Math.sin(angle) * i * segLen;
-      this.nodes.push({ x: nx, y: ny, px: nx, py: ny, grounded: false });
-    }
-  }
-
-  reset(x: number, y: number): void {
-    this.nodes.forEach((n, i) => {
-      n.x = n.px = x;
-      n.y = n.py = y + i * this.segLen;
-      n.grounded = false;
-    });
-  }
-
-  translate(dx: number, dy: number): void {
-    for (const n of this.nodes) {
-      n.x += dx;
-      n.px += dx;
-      n.y += dy;
-      n.py += dy;
-    }
-  }
-
-  step(dt: number, ax: number, ay: number, platforms: readonly Platform[], bounds: WorldBounds): void {
-    const h = clamp(dt, 0, 1 / 20);
-    if (h <= 0) return;
-    const sub = 3;
-    const sh = h / sub;
-    const nodes = this.nodes;
-    for (let s = 0; s < sub; s++) {
-      const root = nodes[0];
-      root.px = root.x;
-      root.py = root.y;
-      root.x = ax;
-      root.y = ay;
-      for (let i = 1; i < nodes.length; i++) {
-        const n = nodes[i];
-        const damp = n.grounded ? 0.82 : 0.992;
-        const vx = (n.x - n.px) * damp;
-        const vy = (n.y - n.py) * damp;
-        n.px = n.x;
-        n.py = n.y;
-        n.x += vx;
-        n.y += vy + GRAVITY * sh * sh;
-      }
-      for (let iter = 0; iter < 8; iter++) {
-        for (let i = 1; i < nodes.length; i++) {
-          const a = nodes[i - 1];
-          const b = nodes[i];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const d = Math.hypot(dx, dy) || 1e-6;
-          // A string only resists stretching, never compression (it can bunch up on the floor).
-          if (d <= this.segLen) continue;
-          const diff = (d - this.segLen) / d;
-          if (i === 1) {
-            b.x -= dx * diff;
-            b.y -= dy * diff;
-          } else {
-            a.x += dx * diff * 0.5;
-            a.y += dy * diff * 0.5;
-            b.x -= dx * diff * 0.5;
-            b.y -= dy * diff * 0.5;
-          }
-        }
-        this.collide(platforms, bounds, iter === 7);
-      }
-    }
-  }
-
-  /** Keeps nodes on top of the ledge / floor below them; on the last pass also applies friction and sets `grounded`. */
-  private collide(platforms: readonly Platform[], bounds: WorldBounds, last: boolean): void {
-    for (let i = 1; i < this.nodes.length; i++) {
-      const n = this.nodes[i];
-      n.x = clamp(n.x, 1, bounds.width - 1);
-      // Only ledges the node was above a moment ago stop it (one-way, like the cats' ledges).
-      const support = platformBelow(n.x, Math.min(n.py, n.y) - 2, platforms, 1);
-      const gy = (support ? support.y : bounds.height - 2) - ROPE_RADIUS;
-      if (n.y > gy) n.y = gy;
-      if (!last) continue;
-      n.grounded = n.y >= gy - 0.05;
-      if (n.grounded) {
-        // Friction: a dragged string slides, it doesn't skate; resting contact kills the bounce.
-        n.px = n.x - (n.x - n.px) * 0.55;
-        n.py = n.y;
-      }
-    }
-  }
-
-  tip(): Vec2 {
-    const t = this.nodes[this.nodes.length - 1];
-    return { x: t.x, y: t.y };
-  }
-
-  /** The lowest-hanging free point (what a cat paws at when the string dangles). */
-  lowestFree(): Vec2 | null {
-    let best: RopeNode | null = null;
-    for (const n of this.nodes) if (!n.grounded && (!best || n.y > best.y)) best = n;
-    return best ? { x: best.x, y: best.y } : null;
-  }
-
-  /** How far the string hangs freely below its anchor (0 when it all lies on the ground). */
-  hangDepth(): number {
-    const a = this.nodes[0];
-    let d = 0;
-    for (const n of this.nodes) if (!n.grounded) d = Math.max(d, n.y - a.y);
-    return d;
-  }
-
-  /** Mean speed of the nodes (px/s at the given dt) — a swinging or wriggling string is irresistible. */
-  speed(dt: number): number {
-    if (dt <= 0) return 0;
-    let s = 0;
-    for (const n of this.nodes) s += Math.hypot(n.x - n.px, n.y - n.py);
-    return s / this.nodes.length / (dt / 3);
-  }
-
-  /** Nearest node index to a point within `r` px, or −1. */
-  nearest(x: number, y: number, r: number): number {
-    let best = -1;
-    let bd = r;
-    this.nodes.forEach((n, i) => {
-      const d = Math.hypot(n.x - x, n.y - y);
-      if (d <= bd) {
-        bd = d;
-        best = i;
-      }
-    });
-    return best;
-  }
-
-  /** A paw swat: kicks the nodes around index `i` with velocity (vx, vy) px/s. */
-  bat(i: number, vx: number, vy: number, dt = 1 / 60): void {
-    const sub = dt / 3;
-    this.nodes.forEach((n, k) => {
-      if (k === 0) return;
-      const w = Math.max(0, 1 - Math.abs(k - i) / 3);
-      if (w <= 0) return;
-      n.px = n.x - vx * sub * w;
-      n.py = n.y - vy * sub * w;
-      n.grounded = false;
-    });
-  }
-
-  /** Total length of the rope as simulated (for tests). */
-  length(): number {
-    let l = 0;
-    for (let i = 1; i < this.nodes.length; i++) l += Math.hypot(this.nodes[i].x - this.nodes[i - 1].x, this.nodes[i].y - this.nodes[i - 1].y);
-    return l;
-  }
-}
+import { GRAVITY, type Platform, type WorldBounds } from '../engine/Physics';
 
 /* ----------------------------------------------------------------- mouse */
 
@@ -217,7 +38,6 @@ export interface MouseBody {
   anim: number;
   /** Seconds before it can be startled into bolting again (a fleeing mouse runs out of puff). */
   calm: number;
-  rope: StringRope;
 }
 
 /** A cat this close (px, horizontally, about the same height) makes the mouse bolt… */
@@ -237,12 +57,12 @@ export const MOUSE_LIVES = 3;
 const BODY_H = 5.5;
 
 export function createMouse(x: number, y: number, dir: 1 | -1 = 1): MouseBody {
-  return { x, y, vx: 0, vy: 0, ground: null, dir, mode: 'pause', modeT: 0.6, speed: 0, catches: 0, anim: 0, calm: 0, rope: new StringRope(x - dir * 8, y) };
+  return { x, y, vx: 0, vy: 0, ground: null, dir, mode: 'pause', modeT: 0.6, speed: 0, catches: 0, anim: 0, calm: 0 };
 }
 
-/** Where the string is tied on: under the mouse's rump. */
-export function ropeAnchor(m: MouseBody): Vec2 {
-  return { x: m.x - m.dir * 8, y: m.y - 1.5 };
+/** Where cats aim when they hunt it: the middle of its body. */
+export function mouseBody(m: MouseBody): Vec2 {
+  return { x: m.x, y: m.y - 4 };
 }
 
 function setMode(m: MouseBody, mode: MouseMode, rng: Rng): void {
@@ -305,7 +125,6 @@ export function stepMouse(m: MouseBody, dt: number, platforms: readonly Platform
         if (m.mode !== 'limp') setMode(m, 'pause', rng);
       }
     }
-    m.rope.step(dt, ropeAnchor(m).x, ropeAnchor(m).y, platforms, bounds);
     return;
   }
   const p = platforms.find((q) => q.id === m.ground) ?? (m.ground === 'floor' ? platforms.find((q) => q.kind === 'floor') ?? null : null);
@@ -314,7 +133,6 @@ export function stepMouse(m: MouseBody, dt: number, platforms: readonly Platform
     m.vx = m.dir * m.speed * 0.5;
     return;
   }
-  if (p.y !== m.y) m.rope.translate(0, p.y - m.y); // the ledge moved (page scroll): the string comes along
   m.y = p.y;
   if (m.mode !== 'caught' && m.mode !== 'limp' && m.mode !== 'flee' && m.calm <= 0) {
     // Danger check: the nearest cat on this level. A stalking cat gets much closer unnoticed.
@@ -383,8 +201,6 @@ export function stepMouse(m: MouseBody, dt: number, platforms: readonly Platform
     }
   }
   m.x = nx;
-  const a = ropeAnchor(m);
-  m.rope.step(dt, a.x, a.y, platforms, bounds);
 }
 
 /** A cat pinned the mouse. */
@@ -394,50 +210,26 @@ export function catchMouse(m: MouseBody, rng: Rng): void {
   setMode(m, 'caught', rng);
 }
 
-/** The user picked the mouse up: it dangles, string hanging below. */
-export function holdMouse(m: MouseBody, x: number, y: number, dt: number, platforms: readonly Platform[], bounds: WorldBounds): void {
+/** The user picked the mouse up: it wriggles in the hand. */
+export function holdMouse(m: MouseBody, x: number, y: number, dt: number): void {
   m.x = x;
   m.y = y + BODY_H;
   m.vx = 0;
   m.vy = 0;
   m.ground = null;
   m.anim += dt * 6;
-  const a = ropeAnchor(m);
-  m.rope.step(dt, a.x, a.y, platforms, bounds);
 }
 
 /* ---------------------------------------------------------------- drawing */
 
+function run0(m: MouseBody): boolean {
+  return m.speed > 1;
+}
+
 export function drawMouse(ctx: AnyCtx, m: MouseBody, held: boolean): void {
-  // The string first (behind the mouse): a smooth twine curve with a pom at the end.
-  const nodes = m.rope.nodes;
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#CDB98F';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(nodes[0].x, nodes[0].y);
-  for (let i = 1; i < nodes.length - 1; i++) {
-    const mx = (nodes[i].x + nodes[i + 1].x) / 2;
-    const my = (nodes[i].y + nodes[i + 1].y) / 2;
-    ctx.quadraticCurveTo(nodes[i].x, nodes[i].y, mx, my);
-  }
-  const tip = nodes[nodes.length - 1];
-  ctx.lineTo(tip.x, tip.y);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(120,96,60,0.35)';
-  ctx.lineWidth = 0.6;
-  ctx.stroke();
-  // Pom.
-  const pg = ctx.createRadialGradient(tip.x - 1, tip.y - 1, 0.5, tip.x, tip.y, 3.6);
-  pg.addColorStop(0, '#FF9AA8');
-  pg.addColorStop(1, '#D9435E');
-  ctx.fillStyle = pg;
-  ctx.beginPath();
-  ctx.arc(tip.x, tip.y, 3.4, 0, Math.PI * 2);
-  ctx.fill();
-
   // The mouse.
   const limp = m.mode === 'limp';
   const squish = m.mode === 'caught' ? 0.72 + 0.08 * Math.sin(m.anim * 20) : 1;
@@ -453,6 +245,14 @@ export function drawMouse(ctx: AnyCtx, m: MouseBody, held: boolean): void {
     ctx.ellipse(0, -0.5, 11, 2, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  // Its own thin rodent tail, swishing a little as it runs or sniffs.
+  const swish = m.mode === 'limp' ? 0 : Math.sin(m.anim * (run0(m) ? 9 : 3)) * (run0(m) ? 1.8 : 1);
+  ctx.strokeStyle = '#C79A9A';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(-9.5, -3);
+  ctx.bezierCurveTo(-15, -3 + swish, -18, -6 - swish, -23, -3.5 + swish * 0.6);
+  ctx.stroke();
   // Feet (a blur of little legs when it runs).
   const run = m.speed > 1 && !held;
   ctx.fillStyle = '#E9A7A7';

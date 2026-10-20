@@ -6,7 +6,7 @@
  */
 import type { AnyCtx } from './canvas';
 
-export type ParticleKind = 'heart' | 'z' | 'spark' | 'puff' | 'bang' | 'note' | 'crumb' | 'drop' | 'kibble' | 'splash' | 'thoughtFood' | 'thoughtWater';
+export type ParticleKind = 'heart' | 'z' | 'spark' | 'puff' | 'bang' | 'note' | 'crumb' | 'drop' | 'kibble' | 'splash' | 'thoughtFood' | 'thoughtWater' | 'fluff';
 
 /** Kinds that fall under gravity. */
 const FALLING = new Set<ParticleKind>(['crumb', 'drop', 'kibble', 'splash']);
@@ -61,6 +61,15 @@ export class ParticleSystem {
           base.max = 0.7;
           base.size = (2.5 + Math.random() * 2) * scale;
           base.vr = (Math.random() - 0.5) * 8;
+          break;
+        case 'fluff':
+          // A wisp of feather fluff knocked loose by a swat: drifts and sways down slowly.
+          base.vx = (Math.random() - 0.5) * 60 * scale;
+          base.vy = -(10 + Math.random() * 30) * scale;
+          base.max = 1.4 + Math.random() * 0.6;
+          base.size = (3 + Math.random() * 2.5) * scale;
+          base.rot = Math.random() * Math.PI;
+          base.vr = (Math.random() - 0.5) * 3;
           break;
         case 'puff':
           base.vx = (Math.random() - 0.5) * 60 * scale;
@@ -132,6 +141,10 @@ export class ParticleSystem {
         p.vy *= Math.exp(-3 * dt);
       }
       if (p.kind === 'heart' || p.kind === 'z' || p.kind === 'note') p.vx += Math.sin(p.life * 4 + p.y * 0.05) * 6 * dt;
+      if (p.kind === 'fluff') {
+        p.vy = Math.min(p.vy + 60 * dt, 26);
+        p.vx = p.vx * Math.exp(-2 * dt) + Math.sin(p.life * 5 + p.rot) * 30 * dt;
+      }
       if (FALLING.has(p.kind)) p.vy += 520 * dt;
       if (p.kind === 'thoughtFood' || p.kind === 'thoughtWater') {
         p.vx *= Math.exp(-1.5 * dt);
@@ -192,6 +205,26 @@ export class ParticleSystem {
           }
           ctx.closePath();
           ctx.fill();
+          ctx.restore();
+          break;
+        }
+        case 'fluff': {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.strokeStyle = 'rgba(255,240,245,0.9)';
+          ctx.lineWidth = Math.max(0.6, s * 0.18);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(-s, 0);
+          ctx.lineTo(s, 0);
+          for (let i = -2; i <= 2; i++) {
+            ctx.moveTo(i * s * 0.4, 0);
+            ctx.lineTo(i * s * 0.4 + s * 0.25, -s * 0.45);
+            ctx.moveTo(i * s * 0.4, 0);
+            ctx.lineTo(i * s * 0.4 + s * 0.25, s * 0.45);
+          }
+          ctx.stroke();
           ctx.restore();
           break;
         }

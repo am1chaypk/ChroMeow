@@ -14,8 +14,8 @@ import { setLanguage, t, tf } from '../src/shared/i18n';
 const B = { width: 1200, height: 700 };
 
 describe('mini-games menu (right-click on a cat)', () => {
-  it('offers every game: treats, laser, ball, the toy mouse, calling the cats and clearing up', () => {
-    expect(GAME_ITEMS.map((i) => i.action)).toEqual(['treat', 'laser', 'ball', 'mouse', 'call', 'clear']);
+  it('offers every game: treats, laser, ball, the feather wand, the toy mouse, calling the cats and clearing up', () => {
+    expect(GAME_ITEMS.map((i) => i.action)).toEqual(['treat', 'laser', 'ball', 'feather_wand', 'mouse', 'call', 'clear']);
     for (const lang of ['en', 'he'] as const) {
       setLanguage(lang);
       for (const item of GAME_ITEMS) {

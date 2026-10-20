@@ -356,7 +356,7 @@ class PopupController {
     const reachable = !!this.page && this.page.running;
     document.querySelectorAll<HTMLButtonElement>('.toy').forEach((b) => {
       b.disabled = !reachable;
-      if (b.dataset.action === 'treat' || b.dataset.action === 'laser' || b.dataset.action === 'ball') b.setAttribute('aria-pressed', String(this.page?.playTool === b.dataset.action));
+      if (b.dataset.action === 'treat' || b.dataset.action === 'laser' || b.dataset.action === 'ball' || b.dataset.action === 'feather_wand') b.setAttribute('aria-pressed', String(this.page?.playTool === b.dataset.action));
     });
     ($('clearAll') as HTMLButtonElement).disabled = !reachable;
     const note = $('note');
@@ -371,7 +371,7 @@ class PopupController {
 
   private async action(action: PopupAction, btn: HTMLButtonElement): Promise<void> {
     if (this.tabId === null) return;
-    if (action === 'treat' || action === 'laser' || action === 'ball') {
+    if (action === 'treat' || action === 'laser' || action === 'ball' || action === 'feather_wand') {
       // Toys go into your hand: play on the page with the left mouse button.
       const tool = this.page?.playTool === action ? null : action;
       const res = await sendToTab<{ ok: boolean }>(this.tabId, { type: 'cm:play', tool });

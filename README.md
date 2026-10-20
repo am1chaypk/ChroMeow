@@ -1,6 +1,6 @@
 # ChroMeow
 
-Alex and Anna, two cats that live on the web pages you visit. They walk along headers and cards, nap in their own named beds or on warm video players, chase your cursor and a toy mouse on a string, watch you type, eat and drink from their own bowls, groom each other, curl up together when you step away, and complain when you pet the other one for too long. You can pick them up by the scruff and carry them anywhere. There is only one Alex and one Anna in the whole browser: they follow you from tab to tab and window to window, and now and then one wanders off to visit another tab. Everything runs locally in your browser: no servers, no analytics, no network requests at all.
+Alex and Anna, two cats that live on the web pages you visit. They walk along headers and cards, nap in their own named beds or on warm video players, chase your cursor, a feather wand and a toy mouse, keep out of your way while you type, eat and drink from their own bowls, groom each other, curl up together when you step away, and complain when you pet the other one for too long. You can pick them up by the scruff and carry them anywhere. There is only one Alex and one Anna in the whole browser: they follow you from tab to tab and window to window, and now and then one wanders off to visit another tab. Everything runs locally in your browser: no servers, no analytics, no network requests at all.
 
 [עברית למטה](#chromeow-בעברית)
 
@@ -41,9 +41,9 @@ Rename them in the popup or the Cat Studio (their names show as אלכס and א�
 
 **The popup** (toolbar icon) shows every cat with a live portrait, current activity, energy and affection. Each card has an **on/off switch** (hide a cat without deleting it), **Edit** (opens the Cat Studio on that cat) and **Remove** (click twice to confirm; the last cat can only be switched off). From the popup you can also:
 
-- Pick up a toy, **Treats**, **Laser pointer** or **Toy ball**, and play on the page with the left mouse button (see below), let the **Toy mouse** loose, or **Call cats** to the middle of the window
+- Pick up a toy, **Treats**, **Laser pointer**, **Toy ball** or **Feather Wand**, and play on the page with the left mouse button (see below), let the **Toy mouse** loose, or **Call cats** to the middle of the window
 - **Bowls** and **Beds**: quick toggles that show or hide the food & water station and the cats' beds
-- **Clear all**: removes every treat, ball, laser dot and toy mouse from the page (the cats stay)
+- **Clear all**: removes every treat, ball, laser dot, feather wand and toy mouse from the page (the cats stay)
 - **Click-through lock**: cats stop catching the mouse so you can click whatever is under them. Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>
 - **Pause on this site** (remembered per domain) or **Pause everywhere**
 - **Food & water**: how full each bowl is (with a "running low" badge), **Refill food 🍖** and **Refill water 💧**
@@ -73,9 +73,11 @@ Petting for a long time eventually overstimulates a cat (Anna's ears flatten muc
 
 **When you step away.** After the idle delay with no mouse or keyboard input (or when the computer goes idle or locks), Alex and Anna walk to each other, trade a quick lick and fall asleep pressed together, Anna draped over Alex, breathing in sync. While they sleep, the page scanner slows down to save battery. Move the mouse or press a key and they wake slowly: a long blink, a stretch, a yawn, then Alex trots over to your pointer with his tail up like a question mark.
 
-**Right-click a cat** for the mini-games menu (instead of the browser's context menu; everywhere else right-click works as usual): treats, laser, ball, the toy mouse, call the cats, or clear all toys. <kbd>Esc</kbd> or a click outside closes it.
+**Right-click a cat** for the mini-games menu (instead of the browser's context menu; everywhere else right-click works as usual): treats, laser, ball, the feather wand, the toy mouse, call the cats, or clear all toys. <kbd>Esc</kbd> or a click outside closes it.
 
-**The toy mouse** is a little grey felt mouse with a twine string and a pom. It runs about by itself like a real mouse: scuttles in short bursts, pauses to sniff, darts off, freezes or bolts when a cat comes close (a cat creeping up low and slow gets much closer than a trotting one), and drops off ledges. The string is a Verlet rope that drags along the floor and the page's ledges and dangles over their edges. The cats stalk it, chase it flat out when it runs, pounce and pin it; after three catches it gives up and lies there until you clear it. Press on the mouse to pick it up: it dangles from your hand with the string hanging below, and the cats leap straight up to bat at the string.
+**The toy mouse** is a little grey felt mouse with its own thin tail and twitching whiskers (no string). It runs about by itself like a real mouse: scuttles in short bursts, pauses to sniff, darts off, freezes or bolts when a cat comes close (a cat creeping up low and slow gets much closer than a trotting one), and drops off ledges. The cats aim for its body: they stalk it, chase it flat out when it runs, pounce and pin it; after three catches it gives up and lies there until you clear it. Press on the mouse to pick it up: it wriggles in your hand, and you can throw it.
+
+**The feather wand** is a teaser rod held at your pointer, with a string and a fluttering feather lure (with a little bead and bell) on the end. The rod tilts as you move your hand. The string is a 14-segment Verlet rope (gravity 0.45 px/frame², damping 0.97, 7 relaxation passes) that collides with the floor and the page's ledges, so when you lower the wand the string and feather lie down and slide along the surface. Drag the feather along the floor (within 25 px of it) and the cats drop into a low stalk, wiggle their bums and pounce to pin it; dangle it 40–260 px above them and they face it and leap straight up to swat it. A swat kicks the feather away, the string jerks, and a few wisps of fluff drift down. The two cats take turns, a few seconds apart.
 
 **The ball** can be picked straight up off the page too, no toy needed: press on it, drag, and let go to throw.
 
@@ -86,14 +88,17 @@ Petting for a long time eventually overstimulates a cat (Anna's ears flatten muc
 | Treats | Click anywhere to drop a treat; it falls onto the ledge below and the cats come to eat |
 | Laser pointer | Hold the button to shine the dot under the pointer; the cats chase it |
 | Toy ball | Press to pick the ball up, drag and let go to throw it; a faster flick throws farther |
+| Feather wand | Just move the pointer: the wand follows it. Lower it to drag the feather along the floor, raise it to dangle the feather above the cats |
 
 Switch toys from the toolbar. Press <kbd>Esc</kbd>, right-click or choose **Done** to put the toy away. Scrolling still works while you play. The same toys work in the Cat Studio's live preview.
 
-**On their own** the cats sleep through full rest chains (curled sleep, sprawl, arch stretch, big yawn, sit), groom, explore, perch on page elements, track and stalk the cursor, pounce on erratic movement, sit near the caret while you type, peek over screen edges, climb the sides of the window, boop noses, groom each other, play tag and wrestle, and sleep together in a yin-yang curl, a pillow stack or a tandem belly hold. A cat on a page element moves with it as you scroll. When the element scrolls off the top of the window, the cat hops down to the floor.
+**On their own** the cats sleep through full rest chains (curled sleep, sprawl, arch stretch, big yawn, sit), groom, explore, perch on page elements, track and stalk the cursor, pounce on erratic movement, peek over screen edges, climb the sides of the window, boop noses, groom each other, play tag and wrestle, and sleep together in a yin-yang curl, a pillow stack or a tandem belly hold. A cat on a page element moves with it as you scroll. When the element scrolls off the top of the window, the cat hops down to the floor.
 
-**Jumps and pounces.** For something in the air (a dangling string, a laser dot on the wall, a ball in flight) a cat leaps straight up, or up and forward, and swats at the top of the leap. It never leaps or lunges backward: if the target is behind it, it turns around first.
+**Jumps and pounces.** For something in the air (a dangling feather, a laser dot on the wall, a ball in flight) a cat leaps straight up, or up and forward, and swats at the top of the leap. It never leaps or lunges backward: if the target is behind it, it turns around first.
 
 **Personal space.** Alex and Anna don't stand or sit on top of each other: a cat heading for a spot the other one has already taken (or is already walking to) settles beside it instead, and two cats that end up overlapping nudge apart. Cuddles, grooming, boops and play are the exceptions. They also never mirror each other: when something happens to both (you call them, drop a toy, come back to the computer) the second one reacts 2–5 seconds after the first, and a cat waits a moment before starting the same thing the other one just started.
+
+**Typing in peace.** Click into a text field (an input, a textarea, a rich-text editor or a search box, including ones inside web components) and the cats move out of the way. The field's box plus 90 px on each side, 110 px above and 70 px below becomes a no-go zone while the field is focused (and for at least 8 seconds after your last keystroke): ledges in it can't be used, a cat napping on or next to the field wakes up and walks at least 140 px away, and no cat walks into or across the zone. From there they sit and watch you type. The zone follows the field as you scroll or resize the window.
 
 **Calm tails.** Tail motion is rate-limited (how fast each joint can bend and each segment can move), and a cat that is sitting, loafing, watching the cursor or the keyboard, resting or asleep keeps its tail completely still.
 
@@ -133,15 +138,15 @@ The cat list on the left has an on/off switch and a remove button for each cat. 
 src/
   shared/      types, 56-state catalogue, presets (Alex & Anna, v1 migration), storage, i18n (EN/HE),
                cat files, zip, colour maths, instance (single-instance leader election, roaming)
-  engine/      Physics, Navigator, DomPlatformScanner, VerletTail, CoatTexture, UVLayout,
+  engine/      Physics, Navigator, DomPlatformScanner, VerletTail, VerletRope, CoatTexture, UVLayout,
                Pose, PoseLibrary, ArticulatedCatRenderer, SpriteRenderer,
                Particles, CatPortrait
   ai/          States (transition graph), FelineFSM, Drives, UtilityBrain, SocialCoordinator,
                HitboxZones
   sim/         CatAgent (tasks, plans, chase & leap, personal space, petting, scruff hold),
                World (cursor, grabbing cats and toys, staggered reactions, roaming, render loop,
-               snapshots), FeedingStation, CatBeds, MouseToy (mouse + Verlet string), ToyTool,
-               StaticPlatformSource
+               snapshots), FeedingStation, CatBeds, MouseToy, FeatherWand, ExclusionZone (typing zones),
+               ToyTool, StaticPlatformSource
   content/     ContentApp, ShadowDOMOverlay, InputInterceptor, ToyManager, PlayMode, GamesMenu
   background/  StateSyncServiceWorker (cross-tab state, leader election, chrome.idle, keyboard
                command, badge)
@@ -175,7 +180,7 @@ Spec names map to states like this: FALLING/JUMPING = `FALL_DESCEND`/`JUMP_ASCEN
 | `npm run dev` | Rebuilds `dist/` on change |
 | `npm run build` | Production build: pages and service worker, then the content script as an IIFE |
 | `npm run typecheck` | `tsc --noEmit` in strict mode |
-| `npm test` | Vitest: transition graph and FSM (including the scruff hold), utility scoring, hysteresis and meals, scruff pendulum and throws, pose springs and neck limits, Verlet tail (rate limits, still lock), photo colour extraction and white balance, jump and vertical-leap physics, hand-held toys, cat export/import, zip round trips, Alex & Anna presets and migration, settings, the mini-games menu, bowl depletion, the toy mouse and its string, beds, single-instance leader election and roaming, personal space and staggering, and headless World runs (eating, empty bowls, picking up and throwing cats and toys, idle cuddle and wake-up, scrolling) |
+| `npm test` | Vitest: transition graph and FSM (including the scruff hold), utility scoring, hysteresis and meals, scruff pendulum and throws, pose springs and neck limits, Verlet tail (rate limits, still lock), photo colour extraction and white balance, jump and vertical-leap physics, hand-held toys, cat export/import, zip round trips, Alex & Anna presets and migration, settings, the mini-games menu, bowl depletion, the toy mouse, the feather wand's rope (gravity, floor draping, swats), typing exclusion zones and evacuation, beds, single-instance leader election and roaming, personal space and staggering, and headless World runs (eating, empty bowls, picking up and throwing cats and toys, idle cuddle and wake-up, scrolling) |
 | `npm run verify` | All three of the above |
 
 After rebuilding, press the reload button on the ChroMeow card in `chrome://extensions` and reload your open tabs.
@@ -190,7 +195,7 @@ Made by APK.
 
 ## ChroMeow בעברית
 
-אלכס ואנה, שני חתולים שגרים בדפי האינטרנט שאתם גולשים בהם. הם מטיילים על כותרות וכרטיסים, נרדמים במיטות שלהם או על נגני וידאו חמימים, רודפים אחרי סמן העכבר ואחרי עכבר צעצוע על חוט, צופים בכם מקלידים, אוכלים ושותים מהקערות שלהם, מלקקים זה את זה, מתכרבלים יחד כשאתם הולכים ומתלוננים כשמלטפים את השני יותר מדי זמן. אפשר להרים אותם בעורף ולשאת אותם לכל מקום. הכול רץ מקומית בדפדפן: בלי שרתים, בלי מעקב ובלי שום בקשת רשת.
+אלכס ואנה, שני חתולים שגרים בדפי האינטרנט שאתם גולשים בהם. הם מטיילים על כותרות וכרטיסים, נרדמים במיטות שלהם או על נגני וידאו חמימים, רודפים אחרי סמן העכבר אחרי חכת נוצה ואחרי עכבר צעצוע, מפנים לכם מקום כשאתם מקלידים, אוכלים ושותים מהקערות שלהם, מלקקים זה את זה, מתכרבלים יחד כשאתם הולכים ומתלוננים כשמלטפים את השני יותר מדי זמן. אפשר להרים אותם בעורף ולשאת אותם לכל מקום. הכול רץ מקומית בדפדפן: בלי שרתים, בלי מעקב ובלי שום בקשת רשת.
 
 ### התקנה
 
@@ -225,7 +230,7 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 
 **החלון הקופץ** (האייקון בסרגל הכלים) מציג כל חתול עם דיוקן חי, הפעילות הנוכחית, אנרגיה וחיבה. בכל כרטיס יש **מתג הפעלה וכיבוי** (להסתיר חתול בלי למחוק אותו), **עריכה** (פותח את הסטודיו על החתול הזה) ו**הסרה** (שתי לחיצות לאישור; את החתול האחרון אפשר רק לכבות). משם אפשר גם:
 
-- לקחת צעצוע, חטיפים, לייזר או כדור, ולשחק בדף עם הכפתור השמאלי של העכבר, לשחרר את **עכבר הצעצוע**, או לקרוא לחתולים למרכז החלון
+- לקחת צעצוע, חטיפים, לייזר, כדור או חכת נוצה, ולשחק בדף עם הכפתור השמאלי של העכבר, לשחרר את **עכבר הצעצוע**, או לקרוא לחתולים למרכז החלון
 - **קערות** ו**מיטות**: כפתורים מהירים להצגה או הסתרה של פינת האוכל ושל המיטות
 - **ניקוי הכול**: מסיר מהדף את כל החטיפים, הכדורים, נקודת הלייזר ועכבר הצעצוע (החתולים נשארים)
 - **נעילת מעבר לחיצות**: החתולים מפסיקים לתפוס את העכבר וניתן ללחוץ על מה שמתחתם. קיצור מקלדת: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>
@@ -246,15 +251,19 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 
 **כשאתם הולכים.** אחרי זמן ההמתנה בלי עכבר ומקלדת (או כשהמחשב ננעל), אלכס ואנה הולכים זה אל זה, מלקקים זה את זה לרגע ונרדמים צמודים, אנה שעונה על אלכס, נושמים באותו קצב. כשאתם חוזרים הם מתעוררים לאט: מצמוץ ארוך, מתיחה, פיהוק, ואז אלכס ניגש לסמן עם זנב בצורת סימן שאלה .
 
-**לחיצה ימנית על חתול** פותחת את תפריט המשחקים (במקום תפריט ההקשר של הדפדפן; בכל מקום אחר הלחיצה הימנית עובדת כרגיל): חטיפים, לייזר, כדור, עכבר הצעצוע, לקרוא לחתולים או לנקות את כל הצעצועים. <kbd>Esc</kbd> או לחיצה מחוץ לתפריט סוגרים אותו.
+**לחיצה ימנית על חתול** פותחת את תפריט המשחקים (במקום תפריט ההקשר של הדפדפן; בכל מקום אחר הלחיצה הימנית עובדת כרגיל): חטיפים, לייזר, כדור, חכת הנוצה, עכבר הצעצוע, לקרוא לחתולים או לנקות את כל הצעצועים. <kbd>Esc</kbd> או לחיצה מחוץ לתפריט סוגרים אותו.
 
-**עכבר הצעצוע** הוא עכבר לבד אפור קטן עם חוט ופונפון. הוא מתרוצץ לבד כמו עכבר אמיתי: ריצות קצרות, עצירות לרחרח, זינוקים, קפיאה או בריחה כשחתול מתקרב (חתול שמתגנב נמוך ולאט מגיע קרוב הרבה יותר), ונפילה ממדפים. החוט הוא חבל ורלה שנגרר על הרצפה ועל המדפים ומשתלשל מהקצוות. החתולים אורבים לו, רודפים אחריו כשהוא בורח, מזנקים ותופסים אותו; אחרי שלוש תפיסות הוא מוותר ונשאר לשכב עד שתנקו. לחיצה על העכבר מרימה אותו: הוא משתלשל מהיד עם החוט תלוי מתחת, והחתולים קופצים ישר למעלה כדי לחבוט בחוט.
+**עכבר הצעצוע** הוא עכבר לבד אפור קטן עם זנב דק משלו ושפם רועד (בלי חוט). הוא מתרוצץ לבד כמו עכבר אמיתי: ריצות קצרות, עצירות לרחרח, זינוקים, קפיאה או בריחה כשחתול מתקרב (חתול שמתגנב נמוך ולאט מגיע קרוב הרבה יותר), ונפילה ממדפים. החתולים מכוונים לגוף שלו: הם אורבים לו, רודפים אחריו כשהוא בורח, מזנקים ותופסים אותו; אחרי שלוש תפיסות הוא מוותר ונשאר לשכב עד שתנקו. לחיצה על העכבר מרימה אותו: הוא מתפתל ביד, ואפשר לזרוק אותו.
+
+**חכת הנוצה** היא מוט משחק שמוחזק בסמן העכבר, עם חוט ופיתיון נוצות מתנפנף (עם חרוז ופעמון קטן) בקצה. המוט נוטה כשמזיזים את היד. החוט הוא חבל ורלה של 14 מקטעים (כבידה 0.45 פיקסל/פריים², ריסון 0.97, 7 מעברי הרפיה) שמתנגש ברצפה ובמדפים של הדף, כך שכשמורידים את החכה החוט והנוצה נשכבים ומחליקים על המשטח. גררו את הנוצה על הרצפה (עד 25 פיקסלים ממנה) והחתולים נשכבים לארוב, מנענעים את הישבן ומזנקים להצמיד אותה; תנו לה להשתלשל 40–260 פיקסלים מעליהם והם מסתובבים אליה וקופצים ישר למעלה לחבוט בה. חבטה מעיפה את הנוצה, החוט נמשך, וכמה פתיתי פלומה צונחים. שני החתולים מתחלפים, בהפרש של כמה שניות.
 
 **את הכדור** אפשר להרים ישר מהדף, בלי לבחור צעצוע: לוחצים עליו, גוררים ומשחררים לזריקה.
 
-**משחק עם צעצועים.** אחרי שבוחרים צעצוע מופיע סרגל קטן בראש הדף, והכפתור השמאלי משחק במקום ללחוץ על קישורים. חטיפים: לחיצה בכל מקום מפילה חטיף. לייזר: מחזיקים את הכפתור והנקודה זזה עם העכבר. כדור: לוחצים, גוררים ומשחררים כדי לזרוק. <kbd>Esc</kbd>, לחיצה ימנית או "סיום" מחזירים את הדף לרגיל.
+**משחק עם צעצועים.** אחרי שבוחרים צעצוע מופיע סרגל קטן בראש הדף, והכפתור השמאלי משחק במקום ללחוץ על קישורים. חטיפים: לחיצה בכל מקום מפילה חטיף. לייזר: מחזיקים את הכפתור והנקודה זזה עם העכבר. כדור: לוחצים, גוררים ומשחררים כדי לזרוק. חכת נוצה: פשוט מזיזים את העכבר; מורידים כדי לגרור את הנוצה על הרצפה, ומרימים כדי שתשתלשל מעל החתולים. <kbd>Esc</kbd>, לחיצה ימנית או "סיום" מחזירים את הדף לרגיל.
 
-**קפיצות.** אל משהו באוויר (חוט משתלשל, נקודת לייזר על הקיר, כדור באוויר) החתול קופץ ישר למעלה, או למעלה וקדימה, וחובט בשיא הקפיצה. הוא אף פעם לא קופץ או מזנק אחורה: אם המטרה מאחוריו, הוא מסתובב קודם.
+**הקלדה בשקט.** לחיצה בתוך שדה טקסט (תיבת קלט, אזור טקסט, עורך טקסט עשיר או תיבת חיפוש, גם בתוך רכיבי ווב) והחתולים מפנים את הדרך. התיבה של השדה, ועוד 90 פיקסלים מכל צד, 110 מעל ו-70 מתחת, הופכת לאזור אסור כל עוד השדה בפוקוס (ולפחות 8 שניות אחרי ההקשה האחרונה): אי אפשר להשתמש במדפים שבתוכו, חתול שישן על השדה או לידו מתעורר והולך לפחות 140 פיקסלים משם, ואף חתול לא נכנס לאזור או חוצה אותו. משם הם יושבים ומסתכלים עליכם מקלידים. האזור זז עם השדה כשגוללים או משנים את גודל החלון.
+
+**קפיצות.** אל משהו באוויר (נוצה משתלשלת, נקודת לייזר על הקיר, כדור באוויר) החתול קופץ ישר למעלה, או למעלה וקדימה, וחובט בשיא הקפיצה. הוא אף פעם לא קופץ או מזנק אחורה: אם המטרה מאחוריו, הוא מסתובב קודם.
 
 **מרחב אישי.** אלכס ואנה לא עומדים ולא יושבים זה על זה: חתול שהולך למקום שהשני כבר תפס (או כבר בדרך אליו) מתיישב לידו, ושני חתולים שנעמדו חופפים מתרחקים מעט. כרבולים, ליקוקים, נגיעות אף ומשחק הם החריגים. הם גם לא מחקים זה את זה: כשמשהו קורה לשניהם (קוראים להם, זורקים צעצוע, חוזרים למחשב) השני מגיב 2–5 שניות אחרי הראשון.
 

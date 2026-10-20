@@ -10,9 +10,14 @@
  *  • Activity: any pointer, key, wheel or scroll input marks the user as
  *    present (for the idle cuddle); window blur / pointercancel end a drag.
  *
+ *  • v3.1 focus tracking: reports which text field (input, textarea,
+ *    contenteditable, role=textbox/searchbox/combobox — also inside open shadow
+ *    roots) has focus or is being typed in, so the cats can keep clear of it.
+ *
  * No keystroke content is stored or sent anywhere — only "typing happened here".
  */
 import type { Vec2 } from '../shared/math';
+import { isEditableInfo } from '../sim/ExclusionZone';
 
 export interface InputCallbacks {
   move(x: number, y: number, t: number): void;
@@ -24,15 +29,45 @@ export interface InputCallbacks {
   cancel?(): void;
   /** The user did something (moved, clicked, typed, scrolled). */
   activity?(): void;
+  /** A text field got focus / was typed in (`typed`), or focus left text fields (null). */
+  focusField?(el: HTMLElement | null, typed: boolean): void;
 }
 
-const TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number', '']);
-
-function isEditable(el: EventTarget | null): el is HTMLElement {
+export function isEditable(el: EventTarget | null): el is HTMLElement {
   if (!(el instanceof HTMLElement)) return false;
-  if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled;
-  if (el instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(el.type) && !el.readOnly && !el.disabled;
-  return el.isContentEditable;
+  const input = el instanceof HTMLInputElement ? el : null;
+  const area = el instanceof HTMLTextAreaElement ? el : null;
+  return isEditableInfo({
+    tag: el.tagName,
+    type: input?.type,
+    readOnly: input?.readOnly ?? area?.readOnly ?? false,
+    disabled: input?.disabled ?? area?.disabled ?? false,
+    contentEditable: el.isContentEditable,
+    role: el.getAttribute('role'),
+  });
+}
+
+/** The focused element, looking inside open shadow roots. */
+export function deepActiveElement(root: Document | ShadowRoot = document): Element | null {
+  let a: Element | null = root.activeElement;
+  while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+  return a;
+}
+
+/** The element an event really happened on (through open shadow roots). */
+function origin(e: Event): EventTarget | null {
+  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+  return (path[0] as EventTarget | undefined) ?? e.target;
+}
+
+/** Closest editable element at or above `t` (a click on a span inside a contenteditable counts). */
+function editableFrom(t: EventTarget | null): HTMLElement | null {
+  let el = t instanceof Element ? t : null;
+  for (let i = 0; el && i < 6; i++) {
+    if (isEditable(el)) return el as HTMLElement;
+    el = el.parentElement;
+  }
+  return null;
 }
 
 let measureCanvas: HTMLCanvasElement | null = null;
@@ -87,6 +122,16 @@ export class InputInterceptor {
   private readonly onDown = (e: PointerEvent) => {
     this.cb.activity?.();
     this.cb.down(e.clientX, e.clientY, e);
+    const field = editableFrom(origin(e));
+    if (field) this.cb.focusField?.(field, false);
+  };
+  private readonly onFocusIn = (e: FocusEvent) => {
+    const field = editableFrom(origin(e)) ?? editableFrom(deepActiveElement());
+    if (field) this.cb.focusField?.(field, false);
+  };
+  private readonly onFocusOut = () => {
+    // Wait for focus to land, then see whether it is still in a text field.
+    setTimeout(() => this.cb.focusField?.(editableFrom(deepActiveElement()), false), 0);
   };
   private readonly onUp = (e: PointerEvent) => this.cb.up(e.clientX, e.clientY);
   private readonly onCancel = () => this.cb.cancel?.();
@@ -95,11 +140,15 @@ export class InputInterceptor {
     if (!e.relatedTarget) this.cb.leave();
   };
   private readonly onInput = (e: Event) => {
-    const el = e.target;
-    if (isEditable(el)) this.cb.typing(el, caretPosition(el));
+    const el = editableFrom(origin(e));
+    if (!el) return;
+    this.cb.focusField?.(el, true);
+    this.cb.typing(el, caretPosition(el));
   };
   private readonly onKey = (e: KeyboardEvent) => {
     this.cb.activity?.();
+    const field = editableFrom(origin(e)) ?? editableFrom(deepActiveElement());
+    if (field) this.cb.focusField?.(field, true);
     const el = (e.composedPath()[0] as EventTarget | undefined) ?? document.activeElement;
     if (isEditable(el ?? null) && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter')) {
       requestAnimationFrame(() => this.cb.typing(el as HTMLElement, caretPosition(el as HTMLElement)));
@@ -119,6 +168,8 @@ export class InputInterceptor {
     window.addEventListener('blur', this.onCancel);
     window.addEventListener('wheel', this.onActivity, this.opts);
     window.addEventListener('scroll', this.onActivity, this.opts);
+    document.addEventListener('focusin', this.onFocusIn, true);
+    document.addEventListener('focusout', this.onFocusOut, true);
   }
 
   stop(): void {
@@ -132,5 +183,7 @@ export class InputInterceptor {
     window.removeEventListener('blur', this.onCancel);
     window.removeEventListener('wheel', this.onActivity, this.opts);
     window.removeEventListener('scroll', this.onActivity, this.opts);
+    document.removeEventListener('focusin', this.onFocusIn, true);
+    document.removeEventListener('focusout', this.onFocusOut, true);
   }
 }

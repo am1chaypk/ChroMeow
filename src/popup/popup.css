@@ -262,7 +262,7 @@ input {
 /* --- toy shelf ---------------------------------------------------------- */
 .shelf {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 5px;
   padding: 12px 10px 4px;
 }

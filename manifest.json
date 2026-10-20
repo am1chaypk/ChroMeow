@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChroMeow",
   "short_name": "ChroMeow",
-  "version": "1.0.0",
+  "version": "3.1.0",
   "description": "Alex & Anna: lifelike cats that live, climb, eat, nap and play on the pages you browse. 100% local. Zero network. Zero telemetry.",
   "minimum_chrome_version": "116",
   "icons": {

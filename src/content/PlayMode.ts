@@ -9,7 +9,11 @@
  * behaves normally again.
  */
 import { lang, t } from '../shared/i18n';
-import { ToyTool, type ToolKind } from '../sim/ToyTool';
+import { TOOL_KINDS, ToyTool, type ToolKind } from '../sim/ToyTool';
+
+/** The feather wand: a slim rod, a string and a bright feather. */
+export const WAND_ICON =
+  '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M27 3L13 14" stroke="#5A4636" stroke-width="2.2" stroke-linecap="round"/><path d="M13 14c-2 4 1 7-1 10" stroke="#CDBF9F" stroke-width="1.2" fill="none"/><circle cx="12" cy="24" r="1.8" fill="#E2B13C"/><path d="M12 24c-5 1-7 4-8 6 3-1 6-2 8-6z" fill="#F2557A"/><path d="M12 24c-2 3-2 5-1 7 2-2 2-4 1-7z" fill="#3BA7D9"/></svg>';
 import type { World } from '../sim/World';
 
 const STYLE = `
@@ -22,6 +26,7 @@ const STYLE = `
 .play-layer[data-tool="laser"] { cursor: crosshair; }
 .play-layer[data-tool="ball"] { cursor: grab; }
 .play-layer[data-tool="ball"].is-down { cursor: grabbing; }
+.play-layer[data-tool="feather_wand"] { cursor: none; }
 .play-hud {
   position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
   z-index: 2147483647; pointer-events: auto;
@@ -53,10 +58,11 @@ const ICONS: Record<ToolKind, string> = {
   treat: '<svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="14" cy="17" rx="9" ry="6" fill="#C9803E"/><path d="M21 17l7-5v10z" fill="#C9803E"/><circle cx="10.5" cy="15.5" r="1.3" fill="#5B3A1E"/></svg>',
   laser: '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="10" fill="#FF3B3B" opacity=".18"/><circle cx="16" cy="16" r="5" fill="#FF3B3B" opacity=".45"/><circle cx="16" cy="16" r="2.2" fill="#FFF2F2"/></svg>',
   ball: '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="17" r="9" fill="#D9435E"/><path d="M10 13c4 3 8 3 12 0M10 21c4-3 8-3 12 0" stroke="#FFE08A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+  feather_wand: WAND_ICON,
 };
 
-const LABEL: Record<ToolKind, string> = { treat: 'toolTreat', laser: 'toolLaser', ball: 'toolBall' };
-const HINT: Record<ToolKind, string> = { treat: 'playTreat', laser: 'playLaser', ball: 'playBall' };
+const LABEL: Record<ToolKind, string> = { treat: 'toolTreat', laser: 'toolLaser', ball: 'toolBall', feather_wand: 'toolWand' };
+const HINT: Record<ToolKind, string> = { treat: 'playTreat', laser: 'playLaser', ball: 'playBall', feather_wand: 'playWand' };
 
 export class PlayMode {
   private readonly tool: ToyTool;
@@ -68,7 +74,7 @@ export class PlayMode {
 
   constructor(
     private readonly root: ShadowRoot,
-    world: () => World | null,
+    private readonly world: () => World | null,
     private readonly onChange: (tool: ToolKind | null) => void = () => undefined,
   ) {
     this.tool = new ToyTool(world);
@@ -86,6 +92,9 @@ export class PlayMode {
     this.tool.select(kind);
     if (kind) this.mount();
     else this.unmount();
+    // The wand appears in hand right where the pointer is.
+    const w = this.world();
+    if (kind === 'feather_wand' && w && w.cursor.x > -1000) this.tool.hover(w.cursor.x, w.cursor.y);
     this.render();
     this.onChange(kind);
   }
@@ -114,7 +123,7 @@ export class PlayMode {
     hud.setAttribute('role', 'toolbar');
     const tools = document.createElement('div');
     tools.className = 'play-hud__tools';
-    for (const kind of ['treat', 'laser', 'ball'] as ToolKind[]) {
+    for (const kind of TOOL_KINDS) {
       const b = document.createElement('button');
       b.type = 'button';
       b.innerHTML = `${ICONS[kind]}<span></span>`;
@@ -188,6 +197,8 @@ export class PlayMode {
   };
 
   private readonly onMove = (e: PointerEvent) => {
+    // The feather wand follows the pointer the whole time, button or not.
+    this.tool.hover(e.clientX, e.clientY);
     if (!this.tool.holding) return;
     // Coalesced events give the throw velocity full precision on fast flicks.
     const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
