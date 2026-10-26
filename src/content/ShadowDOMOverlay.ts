@@ -35,13 +35,24 @@ canvas.stage {
 }
 .hit-layer { position: fixed; inset: 0; width: 0; height: 0; z-index: 2147483647; pointer-events: none; }
 .cat-hitbox {
-  position: fixed; left: 0; top: 0; width: 1px; height: 1px;
+  position: fixed; left: 0; top: 0; width: 1px; height: 1px; z-index: 5;
   pointer-events: auto; background: transparent; cursor: grab;
   touch-action: none; user-select: none; -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 .cat-hitbox:active { cursor: grabbing; }
-.hit-layer.locked .cat-hitbox, .hit-layer.locked .station-hitbox, .hit-layer.locked .bed-hitbox, .hit-layer.locked .toy-hitbox { pointer-events: none; display: none; }
+.hit-layer.locked .cat-hitbox, .hit-layer.locked .station-hitbox, .hit-layer.locked .bed-hitbox, .hit-layer.locked .toy-hitbox, .hit-layer.locked .tower-hitbox, .hit-layer.locked .pom-hitbox { pointer-events: none; display: none; }
+.tower-hitbox {
+  position: fixed; left: 0; top: 0; width: 1px; height: 1px; z-index: 1;
+  pointer-events: auto; background: transparent; cursor: grab;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.tower-hitbox.is-dragging { cursor: grabbing; }
+.pom-hitbox {
+  position: fixed; left: 0; top: 0; width: 1px; height: 1px; z-index: 2; border-radius: 50%;
+  pointer-events: auto; background: transparent; cursor: pointer;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
 .bed-hitbox {
   position: fixed; left: 0; top: 0; width: 1px; height: 1px;
   pointer-events: auto; background: transparent; cursor: grab;
@@ -49,7 +60,7 @@ canvas.stage {
 }
 .bed-hitbox.is-dragging { cursor: grabbing; }
 .toy-hitbox {
-  position: fixed; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%;
+  position: fixed; left: 0; top: 0; width: 1px; height: 1px; border-radius: 50%; z-index: 5;
   pointer-events: auto; background: transparent; cursor: grab;
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
@@ -78,6 +89,13 @@ export interface HitboxHandlers {
 export interface BedHandlers {
   /** Dragging a bed: x is the bed centre's new viewport x. */
   drag(id: string, x: number, phase: 'start' | 'move' | 'end'): void;
+}
+
+export interface TowerHandlers {
+  /** Dragging the tower: x is the tower centre's new viewport x. */
+  drag(x: number, phase: 'start' | 'move' | 'end'): void;
+  /** A swipe or click on the hanging pom-pom (velocity in px/s). */
+  pom(vx: number, vy: number): void;
 }
 
 export interface StationHandlers {
@@ -111,6 +129,11 @@ export class ShadowDOMOverlay {
   private bedHandlers: BedHandlers | null = null;
   private bedDrag: { id: string; pointerId: number; offset: number } | null = null;
   private readonly toyBoxes = new Map<number, HTMLDivElement>();
+  private readonly towerBoxes = new Map<string, HTMLDivElement>();
+  private pomBox: HTMLDivElement | null = null;
+  private towerHandlers: TowerHandlers | null = null;
+  private towerDrag: { pointerId: number; offset: number } | null = null;
+  private towerCx = 0;
 
   constructor(private readonly handlers: HitboxHandlers) {
     this.host = document.createElement('div');
@@ -149,6 +172,8 @@ export class ShadowDOMOverlay {
     this.hitboxes.clear();
     this.bedBoxes.clear();
     this.toyBoxes.clear();
+    this.towerBoxes.clear();
+    this.pomBox = null;
   }
 
   /** Re-attaches the host if a single-page app wiped <html>'s children. */
@@ -380,6 +405,129 @@ export class ShadowDOMOverlay {
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    for (const type of ['click', 'dblclick', 'mousedown', 'mouseup', 'auxclick']) {
+      el.addEventListener(type, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    }
+    this.hitLayer.appendChild(el);
+    return el;
+  }
+
+  /* ------------------------------------------------------ tower hitboxes */
+
+  setTowerHandlers(h: TowerHandlers | null): void {
+    this.towerHandlers = h;
+  }
+
+  /**
+   * Places the cat tower's drag handles (its base and posts) and the little box around the swinging
+   * pom-pom. `cx` is the tower's centre (to keep the grab point under the pointer while dragging).
+   * An empty list removes them (tower hidden, or a text field behind it is being typed in).
+   */
+  syncTower(cx: number, rects: { id: string; rect: { minX: number; minY: number; maxX: number; maxY: number } }[], pom: { minX: number; minY: number; maxX: number; maxY: number } | null): void {
+    this.towerCx = cx;
+    const place = (el: HTMLDivElement, r: { minX: number; minY: number; maxX: number; maxY: number }) => {
+      el.style.display = this.clickThrough ? 'none' : 'block';
+      el.style.transform = `translate(${Math.floor(r.minX)}px, ${Math.floor(r.minY)}px)`;
+      el.style.width = `${Math.ceil(r.maxX - r.minX)}px`;
+      el.style.height = `${Math.ceil(r.maxY - r.minY)}px`;
+    };
+    const seen = new Set<string>();
+    for (const { id, rect } of rects) {
+      seen.add(id);
+      let el = this.towerBoxes.get(id);
+      if (!el) {
+        el = this.createTowerBox(id);
+        this.towerBoxes.set(id, el);
+      }
+      place(el, rect);
+    }
+    for (const [id, el] of this.towerBoxes) {
+      if (seen.has(id) || this.towerDrag) continue;
+      el.remove();
+      this.towerBoxes.delete(id);
+    }
+    if (pom) {
+      if (!this.pomBox) this.pomBox = this.createPomBox();
+      place(this.pomBox, pom);
+    } else if (this.pomBox) {
+      this.pomBox.remove();
+      this.pomBox = null;
+    }
+  }
+
+  private createTowerBox(id: string): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'tower-hitbox';
+    el.dataset.tower = id;
+    el.addEventListener('pointerdown', (e) => {
+      const h = this.towerHandlers;
+      if (!h || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.towerDrag = { pointerId: e.pointerId, offset: e.clientX - this.towerCx };
+      for (const b of this.towerBoxes.values()) b.classList.add('is-dragging');
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      h.drag(e.clientX - this.towerDrag.offset, 'start');
+    });
+    el.addEventListener('pointermove', (e) => {
+      const d = this.towerDrag;
+      if (!d || e.pointerId !== d.pointerId) return;
+      e.preventDefault();
+      this.towerHandlers?.drag(e.clientX - d.offset, 'move');
+    });
+    const end = (e: PointerEvent) => {
+      const d = this.towerDrag;
+      if (!d || e.pointerId !== d.pointerId) return;
+      this.towerHandlers?.drag(e.clientX - d.offset, 'end');
+      this.towerDrag = null;
+      for (const b of this.towerBoxes.values()) b.classList.remove('is-dragging');
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    for (const type of ['click', 'dblclick', 'mousedown', 'mouseup', 'auxclick']) {
+      el.addEventListener(type, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    }
+    this.hitLayer.appendChild(el);
+    return el;
+  }
+
+  /** Brushing the pom-pom with the pointer (or clicking it) sets it swinging. */
+  private createPomBox(): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = 'pom-hitbox';
+    let last: { x: number; y: number; t: number } | null = null;
+    el.addEventListener('pointermove', (e) => {
+      const now = performance.now();
+      if (last && now - last.t > 0 && now - last.t < 120) {
+        const dt = (now - last.t) / 1000;
+        const vx = (e.clientX - last.x) / dt;
+        const vy = (e.clientY - last.y) / dt;
+        if (Math.hypot(vx, vy) > 90) this.towerHandlers?.pom(vx * 0.6, vy * 0.6);
+      }
+      last = { x: e.clientX, y: e.clientY, t: now };
+    });
+    el.addEventListener('pointerleave', () => {
+      last = null;
+    });
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const r = el.getBoundingClientRect();
+      // A click flicks it away from the pointer.
+      const dx = r.left + r.width / 2 - e.clientX;
+      this.towerHandlers?.pom(Math.sign(dx || 1) * 420, -140);
+    });
     for (const type of ['click', 'dblclick', 'mousedown', 'mouseup', 'auxclick']) {
       el.addEventListener(type, (e) => {
         e.preventDefault();

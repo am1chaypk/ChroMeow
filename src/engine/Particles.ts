@@ -6,10 +6,10 @@
  */
 import type { AnyCtx } from './canvas';
 
-export type ParticleKind = 'heart' | 'z' | 'spark' | 'puff' | 'bang' | 'note' | 'crumb' | 'drop' | 'kibble' | 'splash' | 'thoughtFood' | 'thoughtWater' | 'fluff';
+export type ParticleKind = 'heart' | 'z' | 'spark' | 'puff' | 'bang' | 'note' | 'crumb' | 'drop' | 'kibble' | 'splash' | 'thoughtFood' | 'thoughtWater' | 'fluff' | 'sisal';
 
 /** Kinds that fall under gravity. */
-const FALLING = new Set<ParticleKind>(['crumb', 'drop', 'kibble', 'splash']);
+const FALLING = new Set<ParticleKind>(['crumb', 'drop', 'kibble', 'splash', 'sisal']);
 
 interface Particle {
   kind: ParticleKind;
@@ -70,6 +70,15 @@ export class ParticleSystem {
           base.size = (3 + Math.random() * 2.5) * scale;
           base.rot = Math.random() * Math.PI;
           base.vr = (Math.random() - 0.5) * 3;
+          break;
+        case 'sisal':
+          // A tiny fibre torn off the post by a claw: flicks out sideways and falls.
+          base.vx = (Math.random() - 0.5) * 70 * scale;
+          base.vy = -(10 + Math.random() * 30) * scale;
+          base.max = 0.9 + Math.random() * 0.5;
+          base.size = (2 + Math.random() * 1.8) * scale;
+          base.rot = Math.random() * Math.PI;
+          base.vr = (Math.random() - 0.5) * 9;
           break;
         case 'puff':
           base.vx = (Math.random() - 0.5) * 60 * scale;
@@ -224,6 +233,20 @@ export class ParticleSystem {
             ctx.moveTo(i * s * 0.4, 0);
             ctx.lineTo(i * s * 0.4 + s * 0.25, s * 0.45);
           }
+          ctx.stroke();
+          ctx.restore();
+          break;
+        }
+        case 'sisal': {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.strokeStyle = 'rgba(214,188,132,0.95)';
+          ctx.lineWidth = Math.max(0.8, s * 0.3);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(-s, 0);
+          ctx.quadraticCurveTo(0, -s * 0.5, s, s * 0.15);
           ctx.stroke();
           ctx.restore();
           break;

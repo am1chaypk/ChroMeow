@@ -15,11 +15,12 @@
  */
 import type { CatState } from '../shared/catStates';
 import { clamp, clamp01, dist } from '../shared/math';
-import type { BowlKind, CatBedsState, CatProfile, CatRuntimeSnapshot, FeedingStation, Settings, WorldSnapshot } from '../shared/types';
-import { DEFAULT_BEDS, DEFAULT_STATION } from '../shared/storage';
+import type { BowlKind, CatBedsState, CatProfile, CatRuntimeSnapshot, CatTowerState, FeedingStation, Settings, WorldSnapshot } from '../shared/types';
+import { DEFAULT_BEDS, DEFAULT_STATION, DEFAULT_TOWER } from '../shared/storage';
 import { Rng } from '../shared/rng';
 import { BedsModel } from './CatBeds';
-import { filterPlatforms, type NoGoRect } from './ExclusionZone';
+import { filterPlatforms, rectsIntersect, type NoGoRect } from './ExclusionZone';
+import { TowerModel, TowerPlatformSource, batPom, isTowerPlatform } from './CatTower';
 import { staggerDelay } from '../ai/SocialCoordinator';
 import { displayName } from '../shared/i18n';
 import { mixHex } from '../shared/color';
@@ -29,7 +30,7 @@ import { SocialCoordinator } from '../ai/SocialCoordinator';
 import { classifyZone, onCat, type PetZone } from '../ai/HitboxZones';
 import type { IntentKind } from '../ai/UtilityBrain';
 import { ParticleSystem } from '../engine/Particles';
-import { allPlatforms, type Platform, type PlatformSource } from '../engine/Physics';
+import { allPlatforms, type Platform, type PlatformSource, type WorldBounds } from '../engine/Physics';
 import type { AnyCtx } from '../engine/canvas';
 import { ToyManager, type Toy } from '../content/ToyManager';
 import { CatAgent, type AgentEnv, type CursorInfo, type TypingInfo, type WanderHooks } from './CatAgent';
@@ -121,6 +122,8 @@ export interface WorldOptions {
   station?: FeedingStation;
   /** Initial bed positions. */
   beds?: CatBedsState;
+  /** Initial cat tower state (v4). Without it the tower is not out (tests and the Studio preview). */
+  tower?: CatTowerState;
 }
 
 /** Callbacks the host page uses to lock the pointer while a cat (or a toy) is held, and for tab roaming. */
@@ -181,9 +184,16 @@ export class World {
   private leaving: { agent: CatAgent; side: 1 | -1 }[] = [];
   /** The box around the text field being typed in (cats keep out), or null. */
   exclusion: NoGoRect | null = null;
+  /** The vertical cat tree & scratching tower (v4); its three tiers are platforms while it is out. */
+  readonly tower: TowerModel;
+  /** The tower's pom-pom as a play target for the cats (follows the ball). */
+  private readonly pomToy: Toy = { id: -1, kind: 'pom', x: 0, y: 0, vx: 0, vy: 0, ground: null, age: 0, life: Infinity, eaten: 0, claimedBy: null, tx: 0, ty: 0, retarget: 0, spin: 0, idle: 0 };
+  private towerPrev: Record<string, { cx: number; y: number }> | null = null;
 
   constructor(opts: WorldOptions) {
-    this.source = opts.source;
+    this.tower = new TowerModel(opts.tower ?? { ...DEFAULT_TOWER, enabled: false });
+    // The tower's tiers join whatever ledges the page (or the Studio's mock page) has.
+    this.source = new TowerPlatformSource(opts.source, this.tower);
     this.settings = opts.settings;
     this.station = new StationModel(opts.station ?? DEFAULT_STATION);
     this.beds = new BedsModel(opts.beds ?? DEFAULT_BEDS);
@@ -259,6 +269,8 @@ export class World {
       beds: this.beds.enabled ? this.beds : null,
       wander: this.wander,
       noGo: this.exclusion,
+      tower: this.tower.enabled ? this.tower : null,
+      pomToy: this.tower.enabled ? this.pomToy : null,
     };
     this.envCache = env;
     return env;
@@ -272,6 +284,8 @@ export class World {
     this.cursor.update(this.now);
     this.station.scale = clamp(this.settings.catScale, 0.6, 1.6);
     this.beds.scale = this.station.scale;
+    this.tower.scale = this.station.scale;
+    this.syncTower();
     // Only a page with cats on it empties the bowls (the one tab hosting them).
     this.station.depleting = this.agents.length > 0;
     this.station.update(h, this.now);
@@ -291,6 +305,7 @@ export class World {
       else this.dropToy(false);
     }
     this.toys.update(h, this.platforms, env.bounds, this.agents.map((a) => ({ x: a.x, y: a.y, vx: a.vx })));
+    this.updatePom(h, env.bounds);
     if (this.demoHold) this.stepDemoHold(h);
     if (this.held) this.held.holdMove(this.cursor.x, this.cursor.y, this.grabVel.x, this.grabVel.y);
     this.runPending();
@@ -301,6 +316,86 @@ export class World {
     this.flushLeaving();
   }
 
+  /* ----------------------------------------------------- cat tower */
+
+  /**
+   * Keeps the cats on the tower: when it is dragged (or the window is resized) every cat standing on a
+   * tier moves with it by exactly the tier's shift; when it is hidden, a cat on it climbs out of the cubby
+   * and falls to the floor (its tier no longer exists, so physics takes over).
+   */
+  private syncTower(): void {
+    const b = this.source.bounds();
+    const g = this.tower.geom(b);
+    const prev = this.towerPrev;
+    if (!g) {
+      if (prev) for (const a of this.agents) if (isTowerPlatform(a.groundId)) a.releaseFromTower();
+      this.towerPrev = null;
+      return;
+    }
+    const now: Record<string, { cx: number; y: number }> = {};
+    for (const p of this.tower.platforms(b)) now[p.id] = { cx: (p.xMin + p.xMax) / 2, y: p.y };
+    if (prev) {
+      for (const a of this.agents) {
+        const id = a.groundId;
+        if (!isTowerPlatform(id) || !now[id] || !prev[id]) continue;
+        a.carryWith(now[id].cx - prev[id].cx, now[id].y - prev[id].y);
+      }
+    }
+    this.towerPrev = now;
+  }
+
+  /** Switches the tower on / off or moves it (from the popup, the storage or another tab). */
+  setTower(next: CatTowerState): void {
+    this.tower.setState(next);
+    this.syncTower();
+  }
+
+  /**
+   * The user drags the tower along the floor to `xNormalized` (0..1 of the window width). It docks to
+   * the screen edge when close to it and carries its cats along. Returns the stored position.
+   */
+  dragTower(xNormalized: number): number {
+    const x = this.tower.dragTo(xNormalized);
+    this.syncTower();
+    return x;
+  }
+
+  /** Steps the pom-pom's elastic cord and keeps the play target glued to the ball. */
+  private updatePom(dt: number, bounds: WorldBounds): void {
+    const pom = this.tower.updatePom(dt, bounds);
+    if (!pom) return;
+    this.pomToy.x = pom.x;
+    this.pomToy.y = pom.y;
+    this.pomToy.vx = (pom.x - pom.px) * 60;
+    this.pomToy.vy = (pom.y - pom.py) * 60;
+  }
+
+  /**
+   * A hand swipes or clicks the pom-pom: it swings away (velocity in px/s) and — when it was still —
+   * the cats come to climb the tower and play with it, one after the other.
+   */
+  pokePom(vx: number, vy: number): boolean {
+    const pom = this.tower.pom;
+    if (!this.tower.enabled || !pom) return false;
+    const wasLive = pom.sinceDisturbed < 6;
+    batPom(pom, clamp(vx, -1100, 1100), clamp(vy, -1100, 1100));
+    if (!wasLive) {
+      this.staggered('pom', this.agents.filter((a) => !a.isAsleep() && !a.isHeld() && !a.planLocked && !a.isAirborne() && !this.social.sessionOf(a)), (a, e) => {
+        if (!a.isHeld() && !a.planLocked && !a.isAirborne() && e.tower?.enabled) a.command('pom', e);
+      });
+    }
+    return true;
+  }
+
+  /** What the tower has under a pointer: 'pom' (the hanging ball), 'tower' (its base or posts) or nothing. */
+  towerHit(x: number, y: number): 'pom' | 'tower' | null {
+    if (!this.tower.enabled || this.tower.faded) return null;
+    const b = this.source.bounds();
+    const r = this.tower.pomRect(b);
+    if (r && x >= r.minX && x <= r.maxX && y >= r.minY && y <= r.maxY) return 'pom';
+    return this.tower.hit(x, y, b) ? 'tower' : null;
+  }
+
   /* ---------------------------------------------------- typing zones */
 
   /**
@@ -309,6 +404,9 @@ export class World {
    */
   setExclusion(zone: NoGoRect | null): void {
     this.exclusion = zone;
+    // A text field right behind the tower: the tower turns see-through (and can't be grabbed) while you type.
+    const fp = zone ? this.tower.footprint(this.source.bounds()) : null;
+    this.tower.faded = !!zone && !!fp && rectsIntersect(zone, fp);
   }
 
   /** Any cat inside the zone — or heading into it — politely moves out of the way. */
@@ -447,6 +545,7 @@ export class World {
   isDrowsy(): boolean {
     if (this.held) return false;
     if (this.toys.count > 0 || this.particles.count > 8) return false;
+    if (this.tower.pom && this.tower.pom.sinceDisturbed < 5) return false;
     if (this.cursor.present && this.cursor.idle(this.now) < 1) return false;
     return this.agents.every((a) => a.isAsleep() && !a.isPetted());
   }
@@ -454,6 +553,10 @@ export class World {
   render(ctx: AnyCtx): Rect[] {
     const env = this.envCache ?? this.env();
     const rects: Rect[] = [];
+    if (this.tower.enabled) {
+      this.tower.drawBack(ctx, env.bounds);
+      rects.push(...this.tower.rects(env.bounds));
+    }
     if (this.station.enabled) {
       this.station.drawBack(ctx, env.bounds, this.now);
       rects.push(this.station.rect(env.bounds));
@@ -472,10 +575,11 @@ export class World {
     // muzzle dips into the bowl); every other cat walks or sits in front of them.
     const atBowl = (a: CatAgent) => a.state === 'EATING' || a.state === 'DRINKING';
     // Likewise a cat lying in a bed sinks behind the bed's front bolster.
-    const inBed = (a: CatAgent) => !atBowl(a) && a.bedLift > 0.3 && !a.isHeld();
+    const inBed = (a: CatAgent) => !atBowl(a) && (a.bedLift > 0.3 || a.cubbyDrop > 0.3) && !a.isHeld();
     const layers = [order.filter(atBowl), order.filter(inBed), order.filter((a) => !atBowl(a) && !inBed(a))];
     layers.forEach((layer, i) => {
       if (i === 1 && this.station.enabled) this.station.drawFront(ctx, env.bounds);
+      if (i === 2 && this.tower.enabled) this.tower.drawFront(ctx, env.bounds);
       if (i === 2 && this.beds.enabled) this.beds.drawFront(ctx, env.bounds);
       for (const a of layer) {
         const lm = a.draw(ctx, env);
@@ -918,6 +1022,7 @@ export class World {
       STALK_CURSOR: 'hunt',
       POUNCE_AND_PIN: 'hunt',
       EAT_TREAT: 'treat',
+      SCRATCH_POST: 'scratch',
     };
     if (state === 'EAT_TREAT') this.toys.spawnTreat(env.bounds, agent.x + agent.facing * 60);
     const intent = intents[state];

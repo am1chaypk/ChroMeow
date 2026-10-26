@@ -22,6 +22,13 @@ export const THIRST_SEEK = 60;
 /** Hunger / thirst above which a cat sits by an empty bowl and asks for a refill. */
 export const BEG_LEVEL = 75;
 
+/** Scratch urge per second for an average awake cat: from calm (≈20) to the post (60) in about three minutes. */
+export const SCRATCH_RATE = 0.22;
+/** Above this urge a cat heads for the scratching post (if the tower is out). */
+export const SCRATCH_SEEK = 60;
+/** The urge jumps by this much when a cat wakes from sleep (a good morning stretch at the post). */
+export const WAKE_SCRATCH_SPIKE = 38;
+
 export function defaultDrives(p: Personality, traits?: Pick<CatTraits, 'playfulness'>): Drives {
   const play = traits ? traits.playfulness : 0.3 + 0.6 * (1 - p.laziness);
   return {
@@ -33,6 +40,7 @@ export function defaultDrives(p: Personality, traits?: Pick<CatTraits, 'playfuln
     socialNeed: 30 + p.sociability * 20,
     hunger: 22,
     thirst: 20,
+    scratchUrge: 18 + 20 * (1 - p.laziness),
   };
 }
 
@@ -76,6 +84,7 @@ function clampDrives(d: Drives): void {
   d.socialNeed = clamp(d.socialNeed, 0, 100);
   d.hunger = clamp(d.hunger, 0, 100);
   d.thirst = clamp(d.thirst, 0, 100);
+  d.scratchUrge = clamp(d.scratchUrge, 0, 100);
 }
 
 export function updateDrives(d: Drives, state: CatState, dt: number, p: Personality, ctx: DriveContext): void {
@@ -113,6 +122,11 @@ export function updateDrives(d: Drives, state: CatState, dt: number, p: Personal
   // Hunger & thirst build steadily, faster when the cat is busy; meals are handled by the station.
   if (state !== 'EATING') d.hunger += dt * HUNGER_RATE * (ctx.hungerRate ?? 1) * activityFactor(state);
   if (state !== 'DRINKING') d.thirst += dt * THIRST_RATE * (ctx.thirstRate ?? 1) * activityFactor(state);
+
+  // Scratch urge: builds slowly while awake (a good scratch every few minutes); it spikes on waking up (see
+  // `WAKE_SCRATCH_SPIKE`) and a session at the post resets it. Asleep, it rests.
+  if (state === 'SCRATCH_POST') d.scratchUrge = 0;
+  else if (!isSleep(state)) d.scratchUrge += dt * SCRATCH_RATE * (0.7 + 0.6 * (1 - p.laziness));
 
   clampDrives(d);
 }

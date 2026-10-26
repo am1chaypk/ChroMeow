@@ -1230,6 +1230,50 @@ export function computePose(state: CatState, c: PoseContext): Pose {
       p.breathRate = 0.26;
       return p;
     }
+    case 'SCRATCH_POST': {
+      // Rears up on the hind legs against the sisal post in front of it and rakes the claws down it,
+      // one front paw after the other. The post is ~28 local units ahead of the body.
+      const rear = smoothstep(0, 0.35, t);
+      const p = makePose({
+        hipX: lerp(-18, -17, rear),
+        hipY: lerp(-16, -26, rear),
+        shX: lerp(14, 8, rear),
+        shY: lerp(-27, -58, rear),
+        arch: 3,
+        thickTop: 12.5,
+        thickBot: 14.5,
+        haunch: 1.3,
+        headX: lerp(26, 15, rear),
+        headY: lerp(-44, -82, rear),
+        headRot: -0.22 * rear,
+        faceTurn: 0.3,
+        hnX: -16,
+        hnY: 0,
+        hfX: -21,
+        hfY: 0,
+        eyeOpen: 0.55,
+        earL: -4,
+        earR: -4,
+        tailAngle: Math.PI * 0.82,
+        tailCurl: -0.18,
+        tailStiff: 0.45,
+        tailGravity: 300,
+      });
+      const k = t * TAU * 2.1;
+      const near = Math.sin(k);
+      const far = Math.sin(k + Math.PI);
+      // A stroke: the paw reaches up the post, then drags down it with claws out.
+      p.fnX = lerp(20, 27, rear);
+      p.fnY = lerp(-8, -84 + 17 * (0.5 + 0.5 * near), rear);
+      p.ffX = lerp(15, 23, rear);
+      p.ffY = lerp(-8, -80 + 17 * (0.5 + 0.5 * far), rear);
+      p.fnCurl = rear * (0.5 + 0.5 * Math.max(0, -near));
+      p.ffCurl = rear * (0.5 + 0.5 * Math.max(0, -far));
+      p.shiver = 0.12 * rear;
+      p.headY += Math.sin(k) * 0.9;
+      p.squint = 0.25 * rear;
+      return p;
+    }
     default: {
       const _exhaustive: never = state;
       return makePose(_exhaustive);

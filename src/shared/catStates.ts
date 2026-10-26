@@ -78,6 +78,8 @@ export const EXTENDED_STATES = [
   'DRINKING',
   'EMPTY_BOWL_WAIT',
   'CUDDLE_SLEEP',
+  // v4: rearing up against the sisal post of the cat tower
+  'SCRATCH_POST',
 ] as const;
 
 /** Number of states in the original ChroMeow HD sprite layout (one row each). */

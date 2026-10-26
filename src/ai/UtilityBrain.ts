@@ -16,7 +16,7 @@
 import { clamp01, smoothstep } from '../shared/math';
 import { Rng } from '../shared/rng';
 import type { CatTraits, Drives, Personality, SignatureBehaviors, ToyKind } from '../shared/types';
-import { BEG_LEVEL, HUNGER_SEEK, THIRST_SEEK } from './Drives';
+import { BEG_LEVEL, HUNGER_SEEK, SCRATCH_SEEK, THIRST_SEEK } from './Drives';
 
 export const INTENTS = [
   'sleep',
@@ -35,6 +35,8 @@ export const INTENTS = [
   'peek',
   'eat',
   'drink',
+  'scratch',
+  'pom',
 ] as const;
 export type IntentKind = (typeof INTENTS)[number];
 
@@ -71,6 +73,8 @@ export interface BrainContext {
   traits?: Partial<CatTraits>;
   /** The food & water station, if it is out. Levels are 0..100. */
   station?: { exists: boolean; food: number; water: number; dist: number; begReady: boolean };
+  /** The cat tower with its sisal posts, if it is out (v4). */
+  tower?: { exists: boolean; /** The pom-pom is swinging (a paw or your pointer set it going a moment ago). */ pomLive?: boolean };
 }
 
 /** A bowl with this much or less counts as empty. */
@@ -100,6 +104,8 @@ export const MIN_COMMIT: Record<IntentKind, number> = {
   peek: 6,
   eat: 8,
   drink: 8,
+  scratch: 6,
+  pom: 8,
 };
 
 const COMMIT_BONUS = 0.28;
@@ -130,6 +136,13 @@ export function mealScore(need: number, level: number, seek: number, begReady: b
   }
   if (need > BEG_LEVEL && begReady) return 2.05 + 2 * (n - BEG_LEVEL / 100);
   return 0;
+}
+
+/** Score for going to the scratching post: nothing until the urge builds, dominant once it passes the threshold. */
+export function scratchScore(urge: number): number {
+  const n = urge / 100;
+  if (urge > SCRATCH_SEEK) return 2.3 + 1.5 * (n - SCRATCH_SEEK / 100);
+  return 0.5 * smoothstep(SCRATCH_SEEK - 25, SCRATCH_SEEK, urge);
 }
 
 /** Pure scoring function (exported for tests). */
@@ -163,6 +176,8 @@ export function scoreIntents(c: BrainContext): Record<IntentKind, number> {
     peek: 0,
     eat: 0,
     drink: 0,
+    scratch: 0,
+    pom: 0,
   };
   const tr = c.traits ?? {};
   const initiative = tr.socialInitiative ?? 0.5;
@@ -188,6 +203,14 @@ export function scoreIntents(c: BrainContext): Record<IntentKind, number> {
   if (st?.exists) {
     s.eat = mealScore(d.hunger, st.food, HUNGER_SEEK, st.begReady);
     s.drink = mealScore(d.thirst, st.water, THIRST_SEEK, st.begReady);
+  }
+
+  // A cat with an itch in its claws heads for the tower's sisal post (above SCRATCH_SEEK it is a priority,
+  // though a hungry or thirsty cat still eats first).
+  if (c.tower?.exists) {
+    s.scratch = scratchScore(d.scratchUrge);
+    // The hanging pom-pom: irresistible while it is swinging, an occasional idle game otherwise.
+    s.pom = c.tower.pomLive ? 0.8 + 0.6 * play + 0.35 * p.huntDrive - 0.5 * tired : 0.12 * play * energy;
   }
 
   // While being petted, the cat simply wants to stay put.

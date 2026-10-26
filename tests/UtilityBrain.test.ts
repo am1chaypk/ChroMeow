@@ -6,7 +6,7 @@ import { createAlex, createAnna } from '../src/shared/presets';
 function ctx(over: Partial<BrainContext> = {}): BrainContext {
   const cat = createAlex();
   return {
-    drives: { energy: 60, playfulness: 40, affection: 60, curiosity: 40, irritation: 5, socialNeed: 30, hunger: 20, thirst: 20 },
+    drives: { energy: 60, playfulness: 40, affection: 60, curiosity: 40, irritation: 5, socialNeed: 30, hunger: 20, thirst: 20, scratchUrge: 10 },
     personality: cat.personality,
     signature: cat.signature,
     cursor: { present: false, dist: Infinity, speed: 0, erratic: 0, idle: 99 },
@@ -32,7 +32,7 @@ function best(scores: Record<IntentKind, number>): IntentKind {
 
 describe('UtilityBrain scoring  U(a) = Σ wᵢ·fᵢ(dᵢ, context) + ε', () => {
   it('a tired, lazy cat wants to sleep', () => {
-    const s = scoreIntents(ctx({ drives: { energy: 8, playfulness: 10, affection: 60, curiosity: 20, irritation: 0, socialNeed: 10, hunger: 20, thirst: 20 } }));
+    const s = scoreIntents(ctx({ drives: { energy: 8, playfulness: 10, affection: 60, curiosity: 20, irritation: 0, socialNeed: 10, hunger: 20, thirst: 20, scratchUrge: 10 } }));
     expect(best(s)).toBe('sleep');
   });
 
@@ -41,7 +41,7 @@ describe('UtilityBrain scoring  U(a) = Σ wᵢ·fᵢ(dᵢ, context) + ε', () =>
     const s = scoreIntents(
       ctx({
         personality: { ...cat.personality, huntDrive: 0.9, laziness: 0.2 },
-        drives: { energy: 90, playfulness: 95, affection: 50, curiosity: 30, irritation: 0, socialNeed: 10, hunger: 20, thirst: 20 },
+        drives: { energy: 90, playfulness: 95, affection: 50, curiosity: 30, irritation: 0, socialNeed: 10, hunger: 20, thirst: 20, scratchUrge: 10 },
         cursor: { present: true, dist: 140, speed: 600, erratic: 0.9, idle: 0.1 },
       }),
     );
@@ -49,24 +49,24 @@ describe('UtilityBrain scoring  U(a) = Σ wᵢ·fᵢ(dᵢ, context) + ε', () =>
   });
 
   it('food beats everything', () => {
-    const s = scoreIntents(ctx({ toy: { kind: 'treat', dist: 300 }, drives: { energy: 5, playfulness: 0, affection: 10, curiosity: 0, irritation: 0, socialNeed: 0, hunger: 20, thirst: 20 } }));
+    const s = scoreIntents(ctx({ toy: { kind: 'treat', dist: 300 }, drives: { energy: 5, playfulness: 0, affection: 10, curiosity: 0, irritation: 0, socialNeed: 0, hunger: 20, thirst: 20, scratchUrge: 10 } }));
     expect(best(s)).toBe('treat');
   });
 
   it('typing nearby makes a curious cat want to watch the keyboard', () => {
-    const s = scoreIntents(ctx({ typing: { active: true, dist: 150 }, drives: { energy: 70, playfulness: 20, affection: 50, curiosity: 85, irritation: 0, socialNeed: 10, hunger: 20, thirst: 20 } }));
+    const s = scoreIntents(ctx({ typing: { active: true, dist: 150 }, drives: { energy: 70, playfulness: 20, affection: 50, curiosity: 85, irritation: 0, socialNeed: 10, hunger: 20, thirst: 20, scratchUrge: 10 } }));
     expect(best(s)).toBe('keyboard');
   });
 
   it('personality weights shift utilities (sociability → social)', () => {
-    const base = ctx({ partner: { exists: true, dist: 200, asleep: false, available: true }, drives: { energy: 60, playfulness: 40, affection: 60, curiosity: 30, irritation: 0, socialNeed: 80, hunger: 20, thirst: 20 } });
+    const base = ctx({ partner: { exists: true, dist: 200, asleep: false, available: true }, drives: { energy: 60, playfulness: 40, affection: 60, curiosity: 30, irritation: 0, socialNeed: 80, hunger: 20, thirst: 20, scratchUrge: 10 } });
     const shy = scoreIntents({ ...base, personality: { ...base.personality, sociability: 0.1 } });
     const social = scoreIntents({ ...base, personality: { ...base.personality, sociability: 0.95 } });
     expect(social.social).toBeGreaterThan(shy.social + 0.5);
   });
 
   it('never returns negative utilities', () => {
-    const s = scoreIntents(ctx({ drives: { energy: 100, playfulness: 100, affection: 0, curiosity: 0, irritation: 100, socialNeed: 0, hunger: 20, thirst: 20 } }));
+    const s = scoreIntents(ctx({ drives: { energy: 100, playfulness: 100, affection: 0, curiosity: 0, irritation: 100, socialNeed: 0, hunger: 20, thirst: 20, scratchUrge: 10 } }));
     for (const k of INTENTS) expect(s[k]).toBeGreaterThanOrEqual(0);
   });
 });
@@ -82,7 +82,7 @@ describe('UtilityBrain decisions', () => {
     const brain = new UtilityBrain(3);
     brain.set('rest');
     // Rest vs explore roughly tied:
-    const c = ctx({ drives: { energy: 55, playfulness: 30, affection: 50, curiosity: 55, irritation: 0, socialNeed: 0, hunger: 20, thirst: 20 } });
+    const c = ctx({ drives: { energy: 55, playfulness: 30, affection: 50, curiosity: 55, irritation: 0, socialNeed: 0, hunger: 20, thirst: 20, scratchUrge: 10 } });
     let switches = 0;
     for (let i = 0; i < 30; i++) {
       brain.tick(0.5);
@@ -103,7 +103,7 @@ describe('UtilityBrain decisions', () => {
 describe('drives', () => {
   it('sleep restores energy, play spends it and lowers playfulness', () => {
     const p = createAlex().personality;
-    const d = { energy: 40, playfulness: 70, affection: 50, curiosity: 50, irritation: 20, socialNeed: 40, hunger: 20, thirst: 20 };
+    const d = { energy: 40, playfulness: 70, affection: 50, curiosity: 50, irritation: 20, socialNeed: 40, hunger: 20, thirst: 20, scratchUrge: 10 };
     updateDrives(d, 'CURLED_SLEEP', 10, p, { social: false, pettedNicely: false, alone: false });
     expect(d.energy).toBeGreaterThan(44);
     const e0 = d.energy;
@@ -115,7 +115,7 @@ describe('drives', () => {
 
   it('petting raises affection and social interaction satisfies social need', () => {
     const p = createAnna().personality;
-    const d = { energy: 50, playfulness: 50, affection: 30, curiosity: 50, irritation: 0, socialNeed: 80, hunger: 20, thirst: 20 };
+    const d = { energy: 50, playfulness: 50, affection: 30, curiosity: 50, irritation: 0, socialNeed: 80, hunger: 20, thirst: 20, scratchUrge: 10 };
     updateDrives(d, 'PURRING', 5, p, { social: true, pettedNicely: true, alone: false });
     expect(d.affection).toBeGreaterThan(50);
     expect(d.socialNeed).toBeLessThan(75);
@@ -124,7 +124,7 @@ describe('drives', () => {
 
 describe('hunger, thirst and the food & water station', () => {
   const station = (food: number, water: number, begReady = true) => ({ exists: true, food, water, dist: 300, begReady });
-  const hungry = { energy: 60, playfulness: 40, affection: 60, curiosity: 40, irritation: 5, socialNeed: 30, hunger: 70, thirst: 20 };
+  const hungry = { energy: 60, playfulness: 40, affection: 60, curiosity: 40, irritation: 5, socialNeed: 30, hunger: 70, thirst: 20, scratchUrge: 10 };
 
   it('a hungry cat heads for the food bowl above everything else', () => {
     const s = scoreIntents(ctx({ drives: hungry, station: station(60, 60), toy: { kind: 'treat', dist: 100 } }));

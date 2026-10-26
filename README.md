@@ -42,8 +42,8 @@ Rename them in the popup or the Cat Studio (their names show as אלכס and א�
 **The popup** (toolbar icon) shows every cat with a live portrait, current activity, energy and affection. Each card has an **on/off switch** (hide a cat without deleting it), **Edit** (opens the Cat Studio on that cat) and **Remove** (click twice to confirm; the last cat can only be switched off). From the popup you can also:
 
 - Pick up a toy, **Treats**, **Laser pointer**, **Toy ball** or **Feather Wand**, and play on the page with the left mouse button (see below), let the **Toy mouse** loose, or **Call cats** to the middle of the window
-- **Bowls** and **Beds**: quick toggles that show or hide the food & water station and the cats' beds
-- **Clear all**: removes every treat, ball, laser dot, feather wand and toy mouse from the page (the cats stay)
+- **Bowls**, **Beds** and **Cat Tree Tower 🧗**: quick toggles that show or hide the food & water station, the cats' beds and the cat tower
+- **Clear all**: removes every treat, ball, laser dot, feather wand and toy mouse from the page (the cats, tower, beds and bowls stay)
 - **Click-through lock**: cats stop catching the mouse so you can click whatever is under them. Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>
 - **Pause on this site** (remembered per domain) or **Pause everywhere**
 - **Food & water**: how full each bowl is (with a "running low" badge), **Refill food 🍖** and **Refill water 💧**
@@ -70,6 +70,8 @@ Petting for a long time eventually overstimulates a cat (Anna's ears flatten muc
 **Food and water.** A small mat with a food bowl and a water bowl sits on the bottom of the window (on the right by default). Hunger and thirst build over time, faster with zoomies, pouncing and play. A hungry or thirsty cat walks over, eats or drinks with its head in the bowl, and then sits down for a quick face wash. The bowls empty gradually: every meal takes a little, and on top of that the kibble slowly goes (about 14 % an hour) and the water evaporates (about 22 % an hour) while the cats are on screen. While no page shows the cats the bowls keep emptying at half that rate, but by no more than 35 points per absence. Once a bowl is down to 20 % a hungry or thirsty cat keeps thinking about it (a fish or water-drop thought bubble every so often); when it is empty, a very hungry cat sits beside it and looks up at you until you refill it. Click a bowl to refill it (or use the popup), or drag the mat to move the station. Bowl levels are shared by all tabs.
 
 **Beds.** Each cat has its own round bed on the bottom of the window with its name stitched on the front ("Alex", "Anna"; אלכס and אנה in Hebrew). A sleepy cat prefers its own bed and never naps in the other's; when you step away the pair cuddles up in one of their beds. Drag a bed sideways to move it. Positions are shared by all tabs; the **Beds** toggle in the popup hides them.
+
+**The cat tower.** A slim three-tier cat tree with sisal-wrapped posts stands at the left edge of the window (at most 65 % of the window height). Tier 1 has a cubby hole, tier 2 is an offset shelf, and the top has a cushioned lookout bed. The cats climb it step by step (floor, tier 1, tier 2, top) and nap, rest and watch from it. A cat that has been awake a while builds up **scratch urge**; above 60 it walks to the post, scratches for 3–5 seconds with sisal fibres flying, and feels better for it (urge back to 0, mood and affection up). The sisal slowly wears with use. A **pom-pom** hangs under tier 2 on a springy cord: cats on tier 1 swat it, and you can click or swipe it to set it swinging, which brings them climbing to play. **Drag the tower** sideways to move it (it snaps to an edge when you let go within 8 % of it); cats on it ride along. While you type in a field behind it, the tower turns see-through and click-through. With the **Beds** hidden, the tower's top bed and cubby become the cats' sleeping and resting spots (Anna favours the lookout). Toggle it with **Cat Tree Tower 🧗** in the popup: switch it off and any cats on it drop to the floor. **Clear all** never removes the tower, beds or bowls. There is no scratching sound: ChroMeow stays silent.
 
 **When you step away.** After the idle delay with no mouse or keyboard input (or when the computer goes idle or locks), Alex and Anna walk to each other, trade a quick lick and fall asleep pressed together, Anna draped over Alex, breathing in sync. While they sleep, the page scanner slows down to save battery. Move the mouse or press a key and they wake slowly: a long blink, a stretch, a yawn, then Alex trots over to your pointer with his tail up like a question mark.
 
@@ -145,7 +147,7 @@ src/
                HitboxZones
   sim/         CatAgent (tasks, plans, chase & leap, personal space, petting, scruff hold),
                World (cursor, grabbing cats and toys, staggered reactions, roaming, render loop,
-               snapshots), FeedingStation, CatBeds, MouseToy, FeatherWand, ExclusionZone (typing zones),
+               snapshots), FeedingStation, CatBeds, CatTower (tiers, pom-pom cord), MouseToy, FeatherWand, ExclusionZone (typing zones),
                ToyTool, StaticPlatformSource
   content/     ContentApp, ShadowDOMOverlay, InputInterceptor, ToyManager, PlayMode, GamesMenu
   background/  StateSyncServiceWorker (cross-tab state, leader election, chrome.idle, keyboard
@@ -231,7 +233,7 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 **החלון הקופץ** (האייקון בסרגל הכלים) מציג כל חתול עם דיוקן חי, הפעילות הנוכחית, אנרגיה וחיבה. בכל כרטיס יש **מתג הפעלה וכיבוי** (להסתיר חתול בלי למחוק אותו), **עריכה** (פותח את הסטודיו על החתול הזה) ו**הסרה** (שתי לחיצות לאישור; את החתול האחרון אפשר רק לכבות). משם אפשר גם:
 
 - לקחת צעצוע, חטיפים, לייזר, כדור או חכת נוצה, ולשחק בדף עם הכפתור השמאלי של העכבר, לשחרר את **עכבר הצעצוע**, או לקרוא לחתולים למרכז החלון
-- **קערות** ו**מיטות**: כפתורים מהירים להצגה או הסתרה של פינת האוכל ושל המיטות
+- **קערות**, **מיטות** ו**מגדל משחקים וגירוד 🧗**: כפתורים מהירים להצגה או הסתרה של פינת האוכל, המיטות והמגדל
 - **ניקוי הכול**: מסיר מהדף את כל החטיפים, הכדורים, נקודת הלייזר ועכבר הצעצוע (החתולים נשארים)
 - **נעילת מעבר לחיצות**: החתולים מפסיקים לתפוס את העכבר וניתן ללחוץ על מה שמתחתם. קיצור מקלדת: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>
 - להשהות באתר הנוכחי (נשמר לפי דומיין) או בכל מקום
@@ -248,6 +250,8 @@ Chrome לא מריץ תוספים בדפי `chrome://` ובחנות התוספי
 **אוכל ומים.** בתחתית החלון (מימין כברירת מחדל) יש מחצלת עם קערת אוכל וקערת מים. רעב וצמא מצטברים עם הזמן, מהר יותר אחרי ריצות ומשחק. חתול רעב או צמא הולך לקערה, אוכל או שותה, ואחר כך מתיישב לרחיצת פנים קצרה. הקערות מתרוקנות בהדרגה: כל ארוחה לוקחת קצת, ובנוסף האוכל נגמר לאט (כ-14% בשעה) והמים מתאדים (כ-22% בשעה) כל עוד החתולים על המסך. כשאף דף לא מציג אותם הקערות ממשיכות להתרוקן בחצי הקצב, ולא יותר מ-35 נקודות בכל היעדרות. כשקערה יורדת ל-20% חתול רעב או צמא ממשיך לחשוב עליה (בועת מחשבה של דג או טיפה מדי פעם), וכשהיא ריקה חתול רעב מאוד מתיישב לידה ומסתכל עליכם עד שתמלאו. לחיצה על קערה ממלאת אותה (או מהחלון הקופץ), וגרירת המחצלת מזיזה את הפינה. כמות האוכל משותפת לכל הלשוניות.
 
 **מיטות.** לכל חתול יש מיטה עגולה משלו בתחתית החלון, עם השם רקום בחזית (אלכס, אנה). חתול עייף מעדיף את המיטה שלו ולעולם לא ישן במיטה של השני, וכשאתם הולכים הזוג מתכרבל באחת המיטות. גוררים מיטה הצידה כדי להזיז אותה. המיקומים משותפים לכל הלשוניות, והכפתור **מיטות** בחלון הקופץ מסתיר אותן.
+
+**מגדל החתולים.** מגדל משחקים צר בן שלוש קומות, עם עמודים עטופי סיזל, עומד בשולי החלון השמאליים (עד 65% מגובה החלון). בקומה 1 יש חור מסתור, קומה 2 היא מדף מוזז, ובראש יש מיטת תצפית מרופדת. החתולים מטפסים בשלבים (רצפה, קומה 1, קומה 2, ראש המגדל), ישנים, נחים ומתבוננים משם. חתול שער זמן רב צובר **דחף לגרד**; מעל 60 הוא הולך לעמוד, מגרד 3–5 שניות בזמן שסיבי סיזל עפים, ומרגיש טוב יותר (הדחף חוזר ל-0, מצב הרוח והחיבה עולים). הסיזל נשחק לאט עם השימוש. **פונפון** תלוי מתחת לקומה 2 על חוט קפיצי: חתולים בקומה 1 חובטים בו, ואפשר ללחוץ עליו או להעביר עליו את העכבר כדי להניע אותו, מה שמזמין אותם לטפס ולשחק. **גוררים את המגדל** הצידה כדי להזיז אותו (הוא נצמד לשוליים אם משחררים בטווח 8% מהם), והחתולים שעליו נוסעים איתו. כשמקלידים בשדה שמאחוריו המגדל הופך שקוף ולא חוסם לחיצות. כשה**מיטות** מוסתרות, מיטת הראש וחור המסתור של המגדל משמשים לשינה ולמנוחה (אנה מעדיפה את התצפית). מפעילים אותו עם **מגדל משחקים וגירוד 🧗** בחלון הקופץ; כשמכבים אותו חתולים שעליו יורדים לרצפה. **ניקוי הכול** אף פעם לא מסיר את המגדל, המיטות או הקערות. אין צליל גירוד: ChroMeow שותק.
 
 **כשאתם הולכים.** אחרי זמן ההמתנה בלי עכבר ומקלדת (או כשהמחשב ננעל), אלכס ואנה הולכים זה אל זה, מלקקים זה את זה לרגע ונרדמים צמודים, אנה שעונה על אלכס, נושמים באותו קצב. כשאתם חוזרים הם מתעוררים לאט: מצמוץ ארוך, מתיחה, פיהוק, ואז אלכס ניגש לסמן עם זנב בצורת סימן שאלה .
 

@@ -4,13 +4,14 @@
  *  • chrome.storage.session — the live cross-tab world snapshot (service worker only)
  */
 import { defaultProfiles, migrateProfile, normalizeProfile, MAX_CATS } from './presets';
-import type { CatBedsState, CatProfile, FeedingStation, Settings, WorldSnapshot } from './types';
+import type { CatBedsState, CatProfile, CatTowerState, FeedingStation, Settings, WorldSnapshot } from './types';
 
 export const KEY_PROFILES = 'chromeow:profiles';
 export const KEY_SETTINGS = 'chromeow:settings';
 export const KEY_WORLD = 'chromeow:world';
 export const KEY_STATION = 'chromeow:station';
 export const KEY_BEDS = 'chromeow:beds';
+export const KEY_TOWER = 'chromeow:tower';
 export const KEY_INSTANCE = 'chromeow:instance';
 
 export const DEFAULT_STATION: FeedingStation = {
@@ -35,6 +36,10 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const DEFAULT_BEDS: CatBedsState = { enabled: true, positions: {} };
+
+/** The cat tree & scratching tower (v4): on by default, tucked against the left edge, away from the food station. */
+export const TOWER_X_RANGE: readonly [number, number] = [0.04, 0.96];
+export const DEFAULT_TOWER: CatTowerState = { enabled: true, xNormalized: 0.06, scratchWear: 0 };
 
 function hasChromeStorage(): boolean {
   return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local;
@@ -101,6 +106,16 @@ export function normalizeBeds(raw: unknown): CatBedsState {
   return { enabled: typeof s.enabled === 'boolean' ? s.enabled : DEFAULT_BEDS.enabled, positions };
 }
 
+export function normalizeTower(raw: unknown): CatTowerState {
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<CatTowerState>;
+  const num = (v: unknown, fallback: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+  return {
+    enabled: typeof s.enabled === 'boolean' ? s.enabled : DEFAULT_TOWER.enabled,
+    xNormalized: num(s.xNormalized, DEFAULT_TOWER.xNormalized, TOWER_X_RANGE[0], TOWER_X_RANGE[1]),
+    scratchWear: num(s.scratchWear, DEFAULT_TOWER.scratchWear, 0, 100),
+  };
+}
+
 export function normalizeProfiles(raw: unknown): CatProfile[] {
   if (!Array.isArray(raw) || raw.length === 0) return defaultProfiles();
   const valid = (raw as Partial<CatProfile>[]).filter((p) => p && typeof p === 'object').slice(0, MAX_CATS);
@@ -154,12 +169,13 @@ export async function removeProfile(id: string): Promise<CatProfile[]> {
 
 /** Writes factory defaults on first install (and migrates older data) without clobbering user data. */
 export async function ensureDefaults(): Promise<void> {
-  const [profiles, settings, station, beds] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS), localGet(KEY_STATION), localGet(KEY_BEDS)]);
+  const [profiles, settings, station, beds, tower] = await Promise.all([localGet(KEY_PROFILES), localGet(KEY_SETTINGS), localGet(KEY_STATION), localGet(KEY_BEDS), localGet(KEY_TOWER)]);
   if (!Array.isArray(profiles) || profiles.length === 0) await localSet(KEY_PROFILES, defaultProfiles());
   else await localSet(KEY_PROFILES, normalizeProfiles(profiles));
   await localSet(KEY_SETTINGS, normalizeSettings(settings));
   await localSet(KEY_STATION, normalizeStation(station));
   await localSet(KEY_BEDS, normalizeBeds(beds));
+  await localSet(KEY_TOWER, normalizeTower(tower));
 }
 
 export async function loadStation(): Promise<FeedingStation> {
@@ -180,6 +196,16 @@ export async function patchBeds(patch: Partial<CatBedsState>): Promise<CatBedsSt
   const cur = await loadBeds();
   const next = normalizeBeds({ ...cur, ...patch, positions: { ...cur.positions, ...(patch.positions ?? {}) } });
   await localSet(KEY_BEDS, next);
+  return next;
+}
+
+export async function loadTower(): Promise<CatTowerState> {
+  return normalizeTower(await localGet(KEY_TOWER));
+}
+
+export async function patchTower(patch: Partial<CatTowerState>): Promise<CatTowerState> {
+  const next = normalizeTower({ ...(await loadTower()), ...patch });
+  await localSet(KEY_TOWER, next);
   return next;
 }
 

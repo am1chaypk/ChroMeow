@@ -89,6 +89,8 @@ export const STATE_META: Record<CatState, StateMeta> = {
   DRINKING: m('stand', { passThrough: 0.5 }),
   EMPTY_BOWL_WAIT: m('sit', { passThrough: 0.5 }),
   CUDDLE_SLEEP: m('sleep', { passThrough: 1.0 }),
+  // Rears up against the post and drags its claws down the sisal for 3–5 s.
+  SCRATCH_POST: m('stand', { duration: [3, 5], next: 'IDLE_STAND', passThrough: 0.3 }),
 };
 
 const SLEEPS: CatState[] = [...SLEEP_STATES];
@@ -155,6 +157,7 @@ export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
     'SEEKING_WATER',
     'EATING',
     'DRINKING',
+    'SCRATCH_POST',
   ],
   CAT_LOAF: [
     'IDLE_SIT',
@@ -231,6 +234,7 @@ export const TRANSITIONS: Record<CatState, readonly CatState[]> = {
   EATING: ['IDLE_STAND', 'IDLE_SIT'],
   DRINKING: ['IDLE_STAND', 'IDLE_SIT'],
   EMPTY_BOWL_WAIT: ['IDLE_SIT', 'IDLE_STAND', 'CURSOR_GAZE'],
+  SCRATCH_POST: ['IDLE_STAND', 'IDLE_SIT', 'WAKE_ARCH_STRETCH'],
 };
 
 /** Involuntary, physics-driven edges (startles, falls, landings). */

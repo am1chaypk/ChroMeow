@@ -10,9 +10,9 @@
 import { isCatState, type CatState } from '../shared/catStates';
 import { displayName, lang, setLanguage, stateLabel, t, translateDom } from '../shared/i18n';
 import { sendRuntime, sendToTab, type HydrateResponse } from '../shared/messages';
-import { loadBeds, loadProfiles, loadSettings, loadStation, patchBeds, patchProfile, patchSettings, patchStation, removeProfile, hostnameMatches, KEY_BEDS, KEY_PROFILES, KEY_STATION, normalizeBeds, normalizeProfiles, normalizeStation } from '../shared/storage';
+import { loadBeds, loadTower, patchTower, KEY_TOWER, normalizeTower, loadProfiles, loadSettings, loadStation, patchBeds, patchProfile, patchSettings, patchStation, removeProfile, hostnameMatches, KEY_BEDS, KEY_PROFILES, KEY_STATION, normalizeBeds, normalizeProfiles, normalizeStation } from '../shared/storage';
 import { LOW_BOWL } from '../sim/FeedingStation';
-import type { CatBedsState, CatProfile, CatRuntimeSnapshot, FeedingStation, PageInfo, PopupAction, Settings } from '../shared/types';
+import type { CatTowerState, CatBedsState, CatProfile, CatRuntimeSnapshot, FeedingStation, PageInfo, PopupAction, Settings } from '../shared/types';
 
 /** Idle-cuddle delays offered in the popup (seconds). */
 const IDLE_CHOICES = [30, 60, 120, 300, 600, 1800];
@@ -40,6 +40,7 @@ class PopupController {
   private nameTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private station!: FeedingStation;
   private beds!: CatBedsState;
+  private tower!: CatTowerState;
   /** Cats off visiting another tab. */
   private away = new Set<string>();
 
@@ -50,6 +51,7 @@ class PopupController {
     this.profiles = await loadProfiles();
     this.station = await loadStation();
     this.beds = await loadBeds();
+    this.tower = await loadTower();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     this.tabId = tab?.id ?? null;
     if (this.tabId !== null) this.page = await sendToTab<PageInfo>(this.tabId, { type: 'cm:getPageInfo' });
@@ -62,6 +64,10 @@ class PopupController {
       if (area === 'local' && changes[KEY_STATION]) {
         this.station = normalizeStation(changes[KEY_STATION].newValue);
         this.renderStation();
+      }
+      if (area === 'local' && changes[KEY_TOWER]) {
+        this.tower = normalizeTower(changes[KEY_TOWER].newValue);
+        this.renderQuick();
       }
       if (area === 'local' && changes[KEY_BEDS]) {
         this.beds = normalizeBeds(changes[KEY_BEDS].newValue);
@@ -266,6 +272,10 @@ class PopupController {
       this.beds = await patchBeds({ enabled: !this.beds.enabled });
       this.renderQuick();
     });
+    $('toggleTower').addEventListener('click', async () => {
+      this.tower = await patchTower({ enabled: !this.tower.enabled });
+      this.renderQuick();
+    });
     $('clearAll').addEventListener('click', () => void this.action('clear', $('clearAll') as HTMLButtonElement));
     $('roam').addEventListener('change', async (e) => {
       this.settings = await patchSettings({ tabRoaming: (e.target as HTMLInputElement).checked });
@@ -319,6 +329,9 @@ class PopupController {
     const beds = $('toggleBeds');
     beds.setAttribute('aria-pressed', String(!!this.beds?.enabled));
     beds.title = t(this.beds?.enabled ? 'hideBeds' : 'showBeds');
+    const tower = $('toggleTower');
+    tower.setAttribute('aria-pressed', String(!!this.tower?.enabled));
+    tower.title = t(this.tower?.enabled ? 'hideTower' : 'showTower');
     $('clearAll').title = t('clearHint');
   }
 

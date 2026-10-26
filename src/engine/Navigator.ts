@@ -22,6 +22,10 @@ export interface NavPlan {
 }
 
 const EDGE_MARGIN = 22;
+/** The cat tower is climbed one tier at a time (v4): no single jump onto or off it may be taller than this. */
+const TOWER_PREFIX = 'platform_tower_';
+const TOWER_STEP_UP = 170;
+const TOWER_STEP_DOWN = 200;
 const JUMP_COST = 140;
 
 function overlap(a: Platform, b: Platform): number {
@@ -32,6 +36,10 @@ function overlap(a: Platform, b: Platform): number {
 export function planHop(p: Platform, q: Platform, fromX: number, bounds: WorldBounds, margin = EDGE_MARGIN): NavJump | null {
   const rise = p.y - q.y;
   if (rise > MAX_JUMP_UP) return null;
+  // Multi-tier tower: floor → tier 1 → tier 2 → top, never skipping a tier (and the same way down).
+  if (p.id.startsWith(TOWER_PREFIX) || q.id.startsWith(TOWER_PREFIX)) {
+    if (rise > TOWER_STEP_UP || -rise > TOWER_STEP_DOWN) return null;
+  }
   const pLo = p.xMin + margin;
   const pHi = p.xMax - margin;
   const qLo = q.xMin + margin;

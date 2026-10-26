@@ -227,6 +227,8 @@ export interface Drives {
   hunger: number;
   /** 0..100, rises over time (faster when active); drinking brings it down. */
   thirst: number;
+  /** 0..100 (v4), builds up over time and spikes on waking; scratching a post resets it. */
+  scratchUrge: number;
 }
 
 export const DRIVE_KEYS: readonly (keyof Drives)[] = [
@@ -238,6 +240,7 @@ export const DRIVE_KEYS: readonly (keyof Drives)[] = [
   'socialNeed',
   'hunger',
   'thirst',
+  'scratchUrge',
 ];
 
 /** The food & water station on the viewport floor (shared by all tabs). */
@@ -262,6 +265,15 @@ export interface CatBedsState {
   positions: Record<string, number>;
 }
 
+/** The vertical cat tree & scratching tower along the viewport floor (shared by all tabs). */
+export interface CatTowerState {
+  enabled: boolean;
+  /** Horizontal centre of the tower along the floor, 0.04..0.96 (default: tucked at the left edge). */
+  xNormalized: number;
+  /** 0..100: fraying of the sisal posts, accumulates as the cats scratch. */
+  scratchWear: number;
+}
+
 /** The canonical, tab-independent state of one cat (kept by the service worker). */
 export interface CatRuntimeSnapshot {
   id: string;
@@ -282,7 +294,7 @@ export interface WorldSnapshot {
   href: string;
 }
 
-export type ToyKind = 'treat' | 'laser' | 'ball' | 'mouse' | 'feather_wand';
+export type ToyKind = 'treat' | 'laser' | 'ball' | 'mouse' | 'feather_wand' | 'pom';
 
 /** Toys that go into your hand in play mode (the mouse runs about on its own). */
 export type ToolKind = 'treat' | 'laser' | 'ball' | 'feather_wand';

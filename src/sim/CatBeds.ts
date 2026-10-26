@@ -89,7 +89,7 @@ export class BedsModel {
 
   /** Default spot: the beds sit side by side near the left of the floor, away from the food & water. */
   defaultX(index: number): number {
-    return clamp(0.1 + index * 0.13, 0.05, 0.75);
+    return clamp(0.22 + index * 0.13, 0.05, 0.75);
   }
 
   xNormalized(id: string): number {

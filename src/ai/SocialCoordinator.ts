@@ -555,6 +555,8 @@ export class SocialCoordinator implements SocialHooks {
         // Nobody can see them out there (walking off to another tab / window).
         if (offscreen(a) || offscreen(b)) continue;
         if (a.isHeld() || b.isHeld() || a.isAirborne() || b.isAirborne()) continue;
+        // A cat curled up inside the tower's cubby is below the roof: the other cat walks right over it.
+        if (a.inCubby || b.inCubby) continue;
         if (SocialCoordinator.together(a, b) || (a.isAsleep() && b.isAsleep())) continue;
         const ps = ((a.bodyLen() + b.bodyLen()) / 2) * PERSONAL_SPACE;
         const dx = b.x - a.x;

@@ -40,6 +40,7 @@ const FAMILIES: Partial<Record<CatState, string[]>> = {
   GROOM_WASH_FACE: ['groom', 'waving', 'idle'],
   GROOM_BACK_LEG: ['groom', 'waving', 'idle'],
   SCRATCH_EAR_HIND_LEG: ['groom', 'waving', 'idle'],
+  SCRATCH_POST: ['scratch', 'waving', 'idle'],
   SAUNTER_WALK: ['walk', 'running', 'idle'],
   TROT: ['trot', 'running', 'idle'],
   ZOOMIES_SPRINT: ['run', 'running', 'idle'],

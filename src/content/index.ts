@@ -29,19 +29,23 @@ import {
   KEY_PROFILES,
   KEY_SETTINGS,
   KEY_STATION,
+  KEY_TOWER,
   isBlacklisted,
   loadBeds,
   loadProfiles,
   loadSettings,
   loadStation,
+  loadTower,
   normalizeBeds,
   normalizeProfiles,
   normalizeSettings,
   normalizeStation,
+  normalizeTower,
   patchBeds,
   patchStation,
+  patchTower,
 } from '../shared/storage';
-import type { BowlKind, CatBedsState, CatProfile, FeedingStation, PageInfo, Settings } from '../shared/types';
+import type { BowlKind, CatBedsState, CatProfile, CatTowerState, FeedingStation, PageInfo, Settings } from '../shared/types';
 import { DomPlatformScanner } from '../engine/DomPlatformScanner';
 import { World } from '../sim/World';
 import { catchUpStation } from '../sim/FeedingStation';
@@ -90,6 +94,9 @@ class ContentApp {
   private alive = true;
   private station: FeedingStation;
   private beds: CatBedsState;
+  private tower: CatTowerState;
+  private lastTowerSave = 0;
+  private lastTowerWrite = '';
   private lastStationSave = 0;
   private lastStationWrite = '';
   private lastBedsWrite = '';
@@ -110,11 +117,12 @@ class ContentApp {
   private field: HTMLElement | null = null;
   private lastKey = -Infinity;
 
-  constructor(settings: Settings, profiles: CatProfile[], station: FeedingStation, beds: CatBedsState) {
+  constructor(settings: Settings, profiles: CatProfile[], station: FeedingStation, beds: CatBedsState, tower: CatTowerState) {
     this.settings = settings;
     this.profiles = profiles;
     this.station = station;
     this.beds = beds;
+    this.tower = tower;
   }
 
   get shouldRun(): boolean {
@@ -144,7 +152,7 @@ class ContentApp {
     const scanner = new DomPlatformScanner(overlay.host);
     scanner.start();
     this.scanner = scanner;
-    const world = new World({ source: scanner, settings: this.settings, station: this.station, beds: this.beds });
+    const world = new World({ source: scanner, settings: this.settings, station: this.station, beds: this.beds, tower: this.tower });
     world.interactive = !this.settings.clickThroughLock;
     // No cats until the service worker says this tab is the one that hosts them.
     world.setProfiles([], this.profiles);
@@ -167,6 +175,16 @@ class ContentApp {
       drag: (x, phase) => {
         world.station.moveTo(x / Math.max(1, scanner.bounds().width));
         if (phase === 'end') this.saveStation(true);
+      },
+    });
+    overlay.setTowerHandlers({
+      // Dragging the tower along the floor (it docks to the screen edge when close to it) carries its cats along.
+      drag: (x, phase) => {
+        world.dragTower(x / Math.max(1, scanner.bounds().width));
+        if (phase === 'end') this.saveTower(true);
+      },
+      pom: (vx, vy) => {
+        world.pokePom(vx, vy);
       },
     });
     overlay.setBedHandlers({
@@ -440,6 +458,27 @@ class ContentApp {
     void patchBeds(next).catch(() => undefined);
   }
 
+  /** Writes the tower's position / on-off / sisal wear back to storage (the wear, which creeps up, at most every few seconds). */
+  private saveTower(force = false): void {
+    const w = this.world;
+    if (!w || !this.contextAlive() || !w.tower.dirty) return;
+    const now = performance.now();
+    if (!force && now - this.lastTowerSave < 4000) return;
+    this.lastTowerSave = now;
+    w.tower.dirty = false;
+    const next: CatTowerState = { ...w.tower.state, scratchWear: Math.round(w.tower.state.scratchWear * 10) / 10 };
+    this.lastTowerWrite = JSON.stringify(next);
+    this.tower = next;
+    void patchTower(next).catch(() => undefined);
+  }
+
+  /** The tower was moved, worn or switched on / off elsewhere (popup toggle, another tab). */
+  applyTower(next: CatTowerState): void {
+    if (JSON.stringify(next) === this.lastTowerWrite) return;
+    this.tower = next;
+    this.world?.setTower(next);
+  }
+
   /** Bowls changed elsewhere (popup refill, another tab, the toggle). */
   applyStation(next: FeedingStation): void {
     if (JSON.stringify(next) === this.lastStationWrite) return;
@@ -521,6 +560,7 @@ class ContentApp {
     this.world.setExclusion(this.typingZone(now));
     this.world.update(dt);
     this.saveStation();
+    this.saveTower();
     // Sleepy throttle: when everyone is napping (or calm mode is on), draw at ~30 fps.
     // Breathing is slow enough that this stays perfectly smooth while halving the work.
     const drowsy = this.world.isDrowsy() || this.settings.calmMode;
@@ -542,6 +582,9 @@ class ContentApp {
             .filter((x): x is { id: string; rect: NonNullable<ReturnType<typeof w.beds.hitRect>> } => !!x.rect)
         : [],
     );
+    const tw = w.tower;
+    const towerGrabbable = furniture && w.interactive && tw.enabled && !tw.faded;
+    this.overlay.syncTower(tw.centerX(b), towerGrabbable ? tw.hitRects(b) : [], towerGrabbable ? tw.pomRect(b) : null);
     this.overlay.syncToys(
       furniture && w.interactive
         ? w.toys.toys.filter((t) => (t.kind === 'ball' || t.kind === 'mouse') && !t.held).map((t) => ({ id: t.id, x: t.x, y: t.kind === 'mouse' ? t.y - 5 : t.y, r: t.kind === 'mouse' ? 15 : 14 }))
@@ -711,8 +754,8 @@ async function boot(): Promise<void> {
   if (window.__chromeowLoaded) return;
   window.__chromeowLoaded = true;
   if (document.contentType && !/html|xml/.test(document.contentType)) return; // skip raw images, PDFs, JSON…
-  const [settings, profiles, station, beds] = await Promise.all([loadSettings(), loadProfiles(), loadStation(), loadBeds()]);
-  const app = new ContentApp(settings, profiles, station, beds);
+  const [settings, profiles, station, beds, tower] = await Promise.all([loadSettings(), loadProfiles(), loadStation(), loadBeds(), loadTower()]);
+  const app = new ContentApp(settings, profiles, station, beds, tower);
 
   chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
     if (!isRuntimeMessage(msg)) return;
@@ -726,6 +769,7 @@ async function boot(): Promise<void> {
     if (changes[KEY_PROFILES]) app.applyProfiles(normalizeProfiles(changes[KEY_PROFILES].newValue));
     if (changes[KEY_STATION]) app.applyStation(normalizeStation(changes[KEY_STATION].newValue));
     if (changes[KEY_BEDS]) app.applyBeds(normalizeBeds(changes[KEY_BEDS].newValue));
+    if (changes[KEY_TOWER]) app.applyTower(normalizeTower(changes[KEY_TOWER].newValue));
   });
 
   if (app.shouldRun) await app.start();

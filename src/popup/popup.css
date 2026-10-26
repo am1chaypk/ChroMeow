@@ -320,6 +320,7 @@ input {
 .quick {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
   padding: 8px 12px 0;
 }
 
